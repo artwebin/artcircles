@@ -1,0 +1,17 @@
+{
+  "name": "artcircles-notifier",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "license": "MIT",
+  "scripts": {
+    "start": "node notifier.mjs",
+    "test": "node --test"
+  },
+  "dependencies": {
+    "@proton/js": "27.13.0"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}
