@@ -76,3 +76,23 @@ test("durations are readable", () => {
   assert.equal(formatDuration(3900), "1h 5m");
   assert.equal(formatDuration(300), "5m");
 });
+
+test("the recipient gets a reminder that the pot is theirs", () => {
+  const evs = computeEvents({ circles: [circle()], membersByCircle: { 1: [member("alice", { slot: 1 })] }, now: 1000 + 3600 });
+  assert.match(evs[0].text, /goes to you/);
+  assert.match(evs[0].text, /full 30\.00 XUSDC/);
+});
+
+test("deadlines are rendered in the chat's time zone", async () => {
+  const { renderTimes } = await import("./events.mjs");
+  // 2026-10-08 07:26 UTC is 09:26 in Ljubljana (summer time)
+  const sec = Date.UTC(2026, 9, 8, 7, 26) / 1000;
+  assert.match(renderTimes(`Deadline: {{time:${sec}}}`, "Europe/Ljubljana"), /09:26 \(Europe\/Ljubljana\)/);
+  assert.equal(renderTimes(`Deadline: {{time:${sec}}}`, undefined), "Deadline: 2026-10-08 07:26 UTC");
+});
+
+test("time zones are validated", async () => {
+  const { isValidTimeZone } = await import("./events.mjs");
+  assert.equal(isValidTimeZone("Europe/Ljubljana"), true);
+  assert.equal(isValidTimeZone("Mars/Base"), false);
+});

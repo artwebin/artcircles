@@ -30,6 +30,32 @@ export function formatUtc(sec) {
   return new Date(sec * 1000).toISOString().slice(0, 16).replace("T", " ") + " UTC";
 }
 
+// Deadlines are rendered per chat, in that chat's time zone, when the message is sent
+export function deadlineToken(sec) {
+  return `{{time:${sec}}}`;
+}
+
+export function isValidTimeZone(tz) {
+  try {
+    new Intl.DateTimeFormat("en-GB", { timeZone: tz });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+export function formatLocal(sec, tz) {
+  if (!tz) return formatUtc(sec);
+  const s = new Intl.DateTimeFormat("en-GB", {
+    timeZone: tz, weekday: "short", day: "numeric", month: "short", hour: "2-digit", minute: "2-digit", hour12: false,
+  }).format(new Date(sec * 1000));
+  return `${s} (${tz})`;
+}
+
+export function renderTimes(text, tz) {
+  return text.replace(/\{\{time:(\d+)\}\}/g, (_, sec) => formatLocal(Number(sec), tz));
+}
+
 export function buildSnapshot(circles, membersByCircle) {
   const snap = {};
   for (const c of circles) {
@@ -81,8 +107,12 @@ export function computeEvents({ prev, circles, membersByCircle, now }) {
       }
 
       if (c.state === STATE_ACTIVE && m.paidRound !== c.round && left > 0) {
-        const text = `Payment due in ${formatDuration(left)} for ${label(c)}, round ${c.round} of ${c.members}: ${amount}.\n` +
-          `Send ${amount} to artcircles with memo pay:${c.id}\nDeadline: ${formatUtc(deadline)}`;
+        const pot = formatAsset(`${assetAmount(c.amount) * c.members} ${c.amount.split(" ")[1]}`);
+        const intro = m.slot === c.round
+          ? `This round the pot of ${label(c)} goes to you. Pay your share of ${amount} within ${formatDuration(left)} to receive the full ${pot}.\n`
+          : `Payment due in ${formatDuration(left)} for ${label(c)}, round ${c.round} of ${c.members}: ${amount}.\n`;
+        const text = intro +
+          `Send ${amount} to artcircles with memo pay:${c.id}\nDeadline: ${deadlineToken(deadline)}`;
         if (left <= 2 * HOUR) {
           push(m.account, `due2:${c.id}:${c.round}:${m.account}`, text);
           // Skip the 24h reminder if we only noticed the round this late
@@ -96,7 +126,7 @@ export function computeEvents({ prev, circles, membersByCircle, now }) {
 
       if (before.state === STATE_FORMING && c.state === STATE_ACTIVE) {
         push(m.account, `started:${c.id}:${m.account}`,
-          `${label(c)} has started. You are number ${m.slot} of ${c.members}. Round 1 deadline: ${formatUtc(deadline)}.`);
+          `${label(c)} has started. You are number ${m.slot} of ${c.members}. Round 1 deadline: ${deadlineToken(deadline)}.`);
       }
       if (!mb.received && m.received) {
         push(m.account, `received:${c.id}:${m.account}`,

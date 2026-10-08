@@ -8,7 +8,7 @@
 import { JsonRpc } from "@proton/js";
 import { readFileSync, writeFileSync, renameSync, mkdirSync, existsSync } from "node:fs";
 import { join } from "node:path";
-import { buildSnapshot, computeEvents, formatAsset, formatUtc } from "./events.mjs";
+import { buildSnapshot, computeEvents, formatAsset, formatLocal, renderTimes, isValidTimeZone } from "./events.mjs";
 
 const MAX_WATCHES_PER_CHAT = 10;
 const ACCOUNT_RE = /^[a-z1-5.]{1,12}$/;
@@ -18,7 +18,8 @@ const HELP =
   "artcircles reminders\n\n" +
   "/watch <account> - get reminders for an XPR account\n" +
   "/unwatch <account> - stop reminders\n" +
-  "/list - watched accounts and their circles\n\n" +
+  "/list - watched accounts and their circles\n" +
+  "/timezone <zone> - show times in your time zone, e.g. /timezone Europe/Ljubljana\n\n" +
   "This bot only sends information. It will never ask you to sign anything, send funds, or share keys. " +
   "Anything that does is not artcircles.";
 
@@ -35,8 +36,10 @@ function requireEnv(name) {
 // ---------- persistent state ----------
 
 function loadState(file) {
-  if (!existsSync(file)) return { offset: 0, subs: {}, sent: {}, snap: null };
-  return JSON.parse(readFileSync(file, "utf8"));
+  if (!existsSync(file)) return { offset: 0, subs: {}, sent: {}, snap: null, tz: {} };
+  const s = JSON.parse(readFileSync(file, "utf8"));
+  s.tz = s.tz || {};
+  return s;
 }
 
 function saveState(file, state) {
@@ -123,7 +126,8 @@ async function main() {
   process.on("SIGTERM", stop);
   process.on("SIGINT", stop);
 
-  async function deliver(chatId, text) {
+  async function deliver(chatId, rawText) {
+    const text = renderTimes(rawText, state.tz[chatId]);
     try {
       await tg.send(chatId, text);
     } catch (e) {
@@ -180,6 +184,14 @@ async function main() {
       return deliver(chatId, `Watching ${account}. ${n === 0 ? "No circles yet." : `Member of ${n} circle(s), see /list.`}`);
     }
 
+    if (command === "/timezone") {
+      if (!arg) return deliver(chatId, `Your time zone: ${state.tz[chatId] || "UTC (not set)"}\nUsage: /timezone Europe/Ljubljana`);
+      if (!isValidTimeZone(arg)) return deliver(chatId, `Unknown time zone "${arg}". Use a name like Europe/Ljubljana or America/New_York.`);
+      state.tz[chatId] = arg;
+      save();
+      return deliver(chatId, `Times will be shown in ${arg}. Now: ${formatLocal(Math.floor(Date.now() / 1000), arg)}`);
+    }
+
     if (command === "/list") {
       if (subs.length === 0) return deliver(chatId, "You are not watching any account. Use /watch <account>.");
       const lines = [];
@@ -191,7 +203,7 @@ async function main() {
           let line = `  #${c.id} "${c.name}": ${STATE_NAMES[c.state] || c.state}, ${formatAsset(c.amount)} per round`;
           if (c.state === 1) {
             line += `, round ${c.round} of ${c.members}`;
-            if (m) line += m.paidRound === c.round ? ", paid" : `, not paid, deadline ${formatUtc(c.roundStart + c.periodSec)}`;
+            if (m) line += m.paidRound === c.round ? ", paid" : `, not paid, deadline ${formatLocal(c.roundStart + c.periodSec, state.tz[chatId])}`;
           }
           lines.push(line);
         }
