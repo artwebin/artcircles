@@ -25,5 +25,10 @@
     "eslint-config-next": "16.4.0",
     "tailwindcss": "^4",
     "typescript": "^5"
+  },
+  "overrides": {
+    "elliptic": "^6.6.1",
+    "braces": "^3.0.3",
+    "micromatch": "^4.0.8"
   }
 }
