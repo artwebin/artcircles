@@ -1,0 +1,7 @@
+Contact: mailto:security@artwebin.com
+Contact: https://t.me/artcircles_bot
+Expires: 2027-12-31T23:59:59.000Z
+Policy: https://github.com/artwebin/artcircles/security/policy
+Acknowledgments: https://github.com/artwebin/artcircles
+Preferred-Languages: en, sl
+Canonical: https://circles.artwebin.com/.well-known/security.txt
