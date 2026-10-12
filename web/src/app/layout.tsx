@@ -4,7 +4,6 @@ import { ProtonProvider } from "@/components/ProtonProvider";
 import { Toaster } from "react-hot-toast";
 import { TestnetBanner } from "@/components/layout/TestnetBanner";
 import { Header } from "@/components/layout/Header";
-import { MobileTabBar } from "@/components/layout/MobileTabBar";
 import "./globals.css";
 
 const bricolage = Bricolage_Grotesque({
@@ -51,7 +50,6 @@ export default function RootLayout({
           <main style={{ minHeight: "100vh" }}>
             {children}
           </main>
-          <MobileTabBar />
           <Toaster position="bottom-center" />
         </ProtonProvider>
       </body>

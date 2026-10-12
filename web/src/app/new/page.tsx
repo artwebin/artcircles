@@ -718,12 +718,7 @@ export default function NewCirclePage() {
       </div>
 
       {/* MOBILE STICKY SUMMARY BAR */}
-      <div 
-        className="wizard-mobile-summary"
-        style={{
-          bottom: session ? "calc(64px + env(safe-area-inset-bottom))" : 0,
-        }}
-      >
+      <div className="wizard-mobile-summary">
         <div>
           <div style={{ display: "flex", alignItems: "baseline", gap: "6px" }}>
             <span style={{ fontWeight: 800, fontSize: "17px", color: "var(--brand)" }}>

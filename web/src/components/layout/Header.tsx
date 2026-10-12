@@ -4,11 +4,29 @@ import React from "react";
 import Link from "next/link";
 import Image from "next/image";
 import { useProton } from "@/components/ProtonProvider";
-import { Menu, LogOut, ShieldCheck, Bell } from "lucide-react";
+import { LogOut, ShieldCheck, Bell, LayoutGrid, PlusCircle, User, ChevronDown } from "lucide-react";
 
 export function Header() {
   const { session, login, logout } = useProton();
   const [menuOpen, setMenuOpen] = React.useState(false);
+  const menuRef = React.useRef<HTMLDivElement>(null);
+
+  React.useEffect(() => {
+    if (!menuOpen) return;
+
+    function handleClickOutside(event: MouseEvent | TouchEvent) {
+      if (menuRef.current && !menuRef.current.contains(event.target as Node)) {
+        setMenuOpen(false);
+      }
+    }
+
+    document.addEventListener("mousedown", handleClickOutside);
+    document.addEventListener("touchstart", handleClickOutside);
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+      document.removeEventListener("touchstart", handleClickOutside);
+    };
+  }, [menuOpen]);
 
   return (
     <header style={{
@@ -50,12 +68,14 @@ export function Header() {
             <>
               <nav className="desktop-only" style={{ gap: "24px", alignItems: "center" }}>
                 <Link href="/circles" className="text-label" style={{ textDecoration: "none", color: "var(--text)" }}>My circles</Link>
-                <Link href="/new" className="text-label" style={{ textDecoration: "none", color: "var(--text)" }}>New circle</Link>
+                <Link href="/new" className="text-label" style={{ textDecoration: "none", color: "var(--text)" }}>Create a circle</Link>
               </nav>
               
-              <div style={{ position: "relative" }}>
+              <div ref={menuRef} style={{ position: "relative" }}>
                 <button 
                   className="btn-ghost" 
+                  aria-label="Account menu"
+                  aria-expanded={menuOpen}
                   style={{ display: "flex", alignItems: "center", gap: "8px", padding: "4px" }}
                   onClick={() => setMenuOpen(!menuOpen)}
                 >
@@ -63,25 +83,32 @@ export function Header() {
                     {session.auth.actor[0].toUpperCase()}
                   </div>
                   <span className="desktop-only text-label">{session.auth.actor}</span>
+                  <ChevronDown size={14} className="desktop-only" style={{ color: "var(--text-secondary)", transition: "transform 150ms", transform: menuOpen ? "rotate(180deg)" : "none" }} />
                 </button>
 
                 {menuOpen && (
                   <div style={{
                     position: "absolute",
-                    top: "100%",
+                    top: "calc(100% + 8px)",
                     right: 0,
-                    marginTop: "8px",
                     background: "var(--surface)",
                     border: "1px solid var(--border)",
                     borderRadius: "var(--radius-md)",
                     boxShadow: "var(--shadow-overlay)",
-                    minWidth: "200px",
+                    minWidth: "220px",
                     padding: "8px",
                     display: "flex",
                     flexDirection: "column",
+                    zIndex: 50,
                   }}>
+                    <Link href="/circles" className="menu-item" onClick={() => setMenuOpen(false)}>
+                      <LayoutGrid size={16} /> My circles
+                    </Link>
+                    <Link href="/new" className="menu-item" onClick={() => setMenuOpen(false)}>
+                      <PlusCircle size={16} /> Create a circle
+                    </Link>
                     <Link href={`/a/${session.auth.actor}`} className="menu-item" onClick={() => setMenuOpen(false)}>
-                      My profile
+                      <User size={16} /> My profile
                     </Link>
                     <Link href="/reminders" className="menu-item" onClick={() => setMenuOpen(false)}>
                       <Bell size={16} /> Telegram reminders
@@ -90,7 +117,11 @@ export function Header() {
                       <ShieldCheck size={16} /> Safety
                     </Link>
                     <hr style={{ margin: "8px 0", borderTop: "1px solid var(--border)" }} />
-                    <button className="menu-item" onClick={() => { logout(); setMenuOpen(false); }} style={{ color: "var(--danger-text)", textAlign: "left" }}>
+                    <button 
+                      className="menu-item" 
+                      onClick={() => { logout(); setMenuOpen(false); }} 
+                      style={{ color: "var(--danger-text)", textAlign: "left", width: "100%", background: "none", border: "none", cursor: "pointer", font: "inherit" }}
+                    >
                       <LogOut size={16} /> Log out
                     </button>
                   </div>
