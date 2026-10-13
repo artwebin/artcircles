@@ -136,7 +136,7 @@ export default async function CirclePage({ params }: { params: Promise<{ id: str
                     <p className="text-body" style={{ color: "var(--text-secondary)" }}>
                       {members.length < circle.maxMembers 
                         ? "Share the invite link with your members so they can join with their security deposit." 
-                        : members.every((m: any) => m.approved === 1) 
+                        : members.every((m: any) => !!m.approved) 
                           ? "All members have approved the payout order. The organizer can now start the circle."
                           : members.some((m: any) => m.slot !== 0)
                             ? "Waiting for all members to approve the payout order."

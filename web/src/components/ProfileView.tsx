@@ -6,7 +6,8 @@ import { useProton } from "@/components/ProtonProvider";
 import { ReputationCard } from "@/components/ReputationCard";
 import { 
   ReputationData, 
-  getAvatarColor 
+  getAvatarColor,
+  getValidAvatarUrl
 } from "@/lib/reputation";
 import { 
   ShieldCheck, 
@@ -15,7 +16,8 @@ import {
   Check, 
   Share2, 
   Bell, 
-  LogOut 
+  LogOut,
+  BadgeCheck
 } from "lucide-react";
 
 function getFrequencyText(periodSec: number) {
@@ -70,8 +72,10 @@ export function ProfileView({
   // Server render and initial client hydration are always visitor version.
   const isOwner = isMounted && !!session && session.auth?.actor === account;
 
-  const isKycVerified = userInfo?.verified === 1 || (userInfo?.kyc && userInfo.kyc.length > 0);
+  const isKycVerified = !!(userInfo?.kyc && userInfo.kyc.length > 0);
+  const isAccountVerified = userInfo?.verified === 1;
   const avatarColor = getAvatarColor(account);
+  const validAvatarUrl = getValidAvatarUrl(userInfo?.avatar);
 
   // Calculate earliest circle date and organized count
   let earliestSec: number | null = null;
@@ -96,27 +100,29 @@ export function ProfileView({
   if (totalCirclesCount === 0) {
     identityLine = "Not in any circle yet.";
   } else {
-    const sinceMonthYear = earliestSec ? formatMonthYear(earliestSec) : "recently";
+    const sinceMonthYear = earliestSec ? formatMonthYear(earliestSec) : null;
+    const sincePrefix = sinceMonthYear ? `In XPR Circles since ${sinceMonthYear}. ` : "";
     if (organizedCount === 0) {
-      identityLine = `In XPR Circles since ${sinceMonthYear}.`;
+      identityLine = sinceMonthYear ? `In XPR Circles since ${sinceMonthYear}.` : "In XPR Circles.";
     } else if (organizedCount === totalCirclesCount) {
-      identityLine = `In XPR Circles since ${sinceMonthYear}. Organizer of ${organizedCount} ${organizedCount === 1 ? "circle" : "circles"}.`;
+      identityLine = `${sincePrefix}Organizer of ${organizedCount} ${organizedCount === 1 ? "circle" : "circles"}.`.trim();
     } else {
-      identityLine = `In XPR Circles since ${sinceMonthYear}. Organized ${organizedCount} of ${totalCirclesCount} ${totalCirclesCount === 1 ? "circle" : "circles"}.`;
+      identityLine = `${sincePrefix}Organized ${organizedCount} of ${totalCirclesCount} ${totalCirclesCount === 1 ? "circle" : "circles"}.`.trim();
     }
   }
 
   // Filter current vs past circles
   // Current: state 0 (forming) or state 1 (active)
-  // Past: state 2 (completed) or state 3 (cancelled)
+  // Past: state 2 (completed). State 3 (cancelled before start) is excluded.
   const currentCircles = circles
     .filter((c) => c.state === 0 || c.state === 1)
     .sort((a, b) => {
       // Sort: active (1) first, then waiting for order, then waiting for members; inside each, newest first
       const getPriority = (c: any) => {
         if (c.state === 1) return 3;
+        const seatsTaken = c.membersList?.length || 0;
         const isOrderSet = c.membersList?.some((m: any) => m.slot !== 0);
-        if (isOrderSet) return 2;
+        if (isOrderSet || seatsTaken >= c.maxMembers) return 2;
         return 1;
       };
       const pDiff = getPriority(b) - getPriority(a);
@@ -125,9 +131,10 @@ export function ProfileView({
     });
 
   const pastCircles = circles
-    .filter((c) => c.state === 2 || c.state === 3)
+    .filter((c) => c.state === 2)
     .sort((a, b) => Number(b.id) - Number(a.id));
 
+  const completedCount = pastCircles.filter((c) => !c.myMember?.defaulted).length;
   const visiblePastCircles = showAllPast ? pastCircles : pastCircles.slice(0, 10);
 
   // Sharing handling
@@ -165,19 +172,43 @@ export function ProfileView({
       <div className="profile-page-container">
         {/* Full-width Identity Block above the columns */}
         <div className="identity-block">
-          <div
-            className="avatar-circle"
-            style={{
-              background: avatarColor.bg,
-              color: avatarColor.text,
-            }}
-          >
-            {account[0].toLowerCase()}
-          </div>
+          {validAvatarUrl ? (
+            <img
+              src={validAvatarUrl}
+              alt=""
+              className="avatar-circle"
+              style={{ objectFit: "cover" }}
+            />
+          ) : (
+            <div
+              className="avatar-circle"
+              style={{
+                background: avatarColor.bg,
+                color: avatarColor.text,
+              }}
+            >
+              {account[0].toLowerCase()}
+            </div>
+          )}
 
           <div style={{ flex: 1 }}>
             <div className="name-kyc-row">
-              <h1 className="account-h1">{account}</h1>
+              <div style={{ display: "inline-flex", alignItems: "center", gap: "8px" }}>
+                <h1 className="account-h1">{account}</h1>
+                {isAccountVerified && (
+                  <span
+                    title="Verified XPR account"
+                    aria-label="Verified XPR account"
+                    style={{ display: "inline-flex", alignItems: "center", flexShrink: 0 }}
+                  >
+                    <BadgeCheck
+                      size={22}
+                      color="#0B5A4E"
+                      aria-hidden="true"
+                    />
+                  </span>
+                )}
+              </div>
               {isKycVerified ? (
                 <span className="kyc-pill kyc-verified">
                   <ShieldCheck size={16} aria-hidden={true} /> KYC verified
@@ -230,17 +261,18 @@ export function ProfileView({
                     const isOrganizer = c.organizer === account;
                     const seatsTaken = c.membersList?.length || 0;
                     const isOrderSet = c.membersList?.some((m: any) => m.slot !== 0);
-                    const approvedCount = c.membersList?.filter((m: any) => m.approved === 1).length || 0;
+                    const isFull = seatsTaken >= c.maxMembers;
+                    const approvedCount = c.membersList?.filter((m: any) => !!m.approved).length || 0;
 
                     // Line 3 calculation
                     let line3 = "";
                     let rightPill: React.ReactNode = null;
 
                     if (c.state === 0) {
-                      if (!isOrderSet) {
-                        line3 = `${seatsTaken} of ${c.maxMembers} seats taken. Starts when everyone has joined.`;
-                      } else {
+                      if (isOrderSet || isFull) {
                         line3 = `Order approved by ${approvedCount} of ${c.membersList.length}.`;
+                      } else {
+                        line3 = `${seatsTaken} of ${c.maxMembers} seats taken. Starts when everyone has joined.`;
                       }
                     } else if (c.state === 1) {
                       if (!myMember) {
@@ -279,6 +311,10 @@ export function ProfileView({
                             {c.state === 1 ? (
                               <span className="status-pill status-paid" style={{ height: "22px", fontSize: "12px", gap: "5px" }}>
                                 <span style={{ width: "6px", height: "6px", borderRadius: "50%", background: "var(--brand)" }} /> Active
+                              </span>
+                            ) : isFull || isOrderSet ? (
+                              <span className="status-pill status-neutral" style={{ height: "22px", fontSize: "12px" }}>
+                                ● Waiting for the order
                               </span>
                             ) : (
                               <span className="status-pill status-neutral" style={{ height: "22px", fontSize: "12px" }}>
@@ -321,7 +357,7 @@ export function ProfileView({
               <div className="card-header-row">
                 <h2 className="card-title-h2">Past circles</h2>
                 <span className="card-count-label">
-                  {pastCircles.length === 0 ? "None yet" : `${pastCircles.length} completed`}
+                  {completedCount === 0 ? "None yet" : `${completedCount} completed`}
                 </span>
               </div>
 

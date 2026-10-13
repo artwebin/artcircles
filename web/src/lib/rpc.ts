@@ -87,8 +87,47 @@ export async function getCircles(limit = 20, reverse = true) {
   return data.rows || [];
 }
 
+/**
+ * Paginates through the entire circles table using more / next_key
+ * so older circles do not disappear as the table grows.
+ */
+export async function getAllCircles(): Promise<any[]> {
+  const allRows: any[] = [];
+  let lowerBound: string | number = 0;
+  let hasMore = true;
+
+  while (hasMore) {
+    const data = await fetchWithFailover("/v1/chain/get_table_rows", {
+      code: "artcircles",
+      scope: "artcircles",
+      table: "circles",
+      limit: 100,
+      lower_bound: lowerBound,
+      json: true,
+    });
+
+    const rows = data?.rows || [];
+    if (rows.length === 0) break;
+
+    for (const r of rows) {
+      if (!allRows.some((existing) => existing.id === r.id)) {
+        allRows.push(r);
+      }
+    }
+
+    if (data.more && data.next_key) {
+      lowerBound = data.next_key;
+    } else {
+      hasMore = false;
+    }
+  }
+
+  return allRows.sort((a, b) => Number(b.id) - Number(a.id));
+}
+
 export async function getMyCircles(account: string) {
-  const circles = await getCircles(100, true);
+  const startTime = Date.now();
+  const circles = await getAllCircles();
   const circlesWithMembers = await Promise.all(
     circles.map(async (circle: any) => {
       try {
@@ -113,6 +152,11 @@ export async function getMyCircles(account: string) {
       }
     })
   );
+
+  const duration = Date.now() - startTime;
+  if (duration > 1000) {
+    console.warn(`[PERF WARNING] getMyCircles for account "${account}" took ${duration}ms (>1000ms). Secondary index needed.`);
+  }
 
   return circlesWithMembers.filter((c: any) => c.isMember || c.isOrganizer);
 }
@@ -177,6 +221,8 @@ export async function getChainAccount(account: string): Promise<{ exists: boolea
     return cached.data;
   }
 
+  let lastError: any = null;
+
   for (const endpoint of RPC_ENDPOINTS) {
     try {
       const controller = new AbortController();
@@ -188,23 +234,50 @@ export async function getChainAccount(account: string): Promise<{ exists: boolea
         signal: controller.signal,
       });
       clearTimeout(timeoutId);
-      if (response.status === 400 || response.status === 404 || response.status === 500) {
+
+      const contentType = response.headers.get("content-type") || "";
+      let data: any = null;
+      if (contentType.includes("application/json")) {
+        try {
+          data = await response.json();
+        } catch (e) {
+          // not json
+        }
+      }
+
+      // Check if node returned unknown key / account_query_exception
+      const isUnknownAccount =
+        data?.error?.name === "account_query_exception" ||
+        (typeof data?.message === "string" && data.message.includes("unknown key")) ||
+        (data?.error?.details &&
+          Array.isArray(data.error.details) &&
+          data.error.details.some(
+            (d: any) =>
+              typeof d.message === "string" &&
+              (d.message.includes("unknown key") || d.message.includes("account_query_exception"))
+          ));
+
+      if (isUnknownAccount) {
         const res = { exists: false, created: null };
         rpcCache.set(cacheKey, { data: res, expiry: Date.now() + 10000 });
         return res;
       }
-      if (!response.ok) continue;
-      const data = await response.json();
-      if (data && data.account_name === account) {
+
+      if (response.ok && data && data.account_name === account) {
         const res = { exists: true, created: data.created || null };
         rpcCache.set(cacheKey, { data: res, expiry: Date.now() + 10000 });
         return res;
       }
-    } catch (e) {
+
+      lastError = new Error(`Endpoint ${endpoint} returned status ${response.status}`);
+    } catch (e: any) {
+      lastError = e;
       // try next endpoint
     }
   }
-  return { exists: false, created: null };
+
+  // All endpoints failed or returned other errors - do NOT cache negative result!
+  throw lastError || new Error("Could not reach XPR Network");
 }
 
 

@@ -1,6 +1,6 @@
 import { ImageResponse } from "next/og";
-import { getReputation } from "@/lib/rpc";
-import { getReputationCopy, getAvatarColor } from "@/lib/reputation";
+import { getReputation, getAccountInfo } from "@/lib/rpc";
+import { getReputationCopy, getAvatarColor, getValidAvatarUrl } from "@/lib/reputation";
 
 export const runtime = "nodejs";
 export const size = { width: 1200, height: 630 };
@@ -11,8 +11,14 @@ export default async function Image({ params }: { params: Promise<{ account: str
   const account = resolvedParams.account || "account";
 
   let reputation = { completed: 0, missed: 0, defaulted: 0 };
+  let userInfo: any = null;
   try {
-    reputation = await getReputation(account);
+    const [rep, info] = await Promise.all([
+      getReputation(account),
+      getAccountInfo(account),
+    ]);
+    reputation = rep;
+    userInfo = info;
   } catch (e) {
     // fallback
   }
@@ -20,6 +26,7 @@ export default async function Image({ params }: { params: Promise<{ account: str
   const { completed: c, missed: m, defaulted: d } = reputation;
   const { state, sentence } = getReputationCopy(c, m, d);
   const avatarColor = getAvatarColor(account);
+  const validAvatarUrl = getValidAvatarUrl(userInfo?.avatar);
 
   // Colors per reputation state
   let bandBg = "#F5F6F3";
@@ -57,23 +64,38 @@ export default async function Image({ params }: { params: Promise<{ account: str
         {/* Header: Wordmark & Identity */}
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
           <div style={{ display: "flex", alignItems: "center", gap: "24px" }}>
-            <div
-              style={{
-                width: "80px",
-                height: "80px",
-                borderRadius: "50%",
-                background: avatarColor.bg,
-                color: avatarColor.text,
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                fontSize: "40px",
-                fontWeight: 700,
-                textTransform: "lowercase",
-              }}
-            >
-              {account[0]?.toLowerCase()}
-            </div>
+            {validAvatarUrl ? (
+              <img
+                src={validAvatarUrl}
+                alt=""
+                width="80"
+                height="80"
+                style={{
+                  width: "80px",
+                  height: "80px",
+                  borderRadius: "50%",
+                  objectFit: "cover",
+                }}
+              />
+            ) : (
+              <div
+                style={{
+                  width: "80px",
+                  height: "80px",
+                  borderRadius: "50%",
+                  background: avatarColor.bg,
+                  color: avatarColor.text,
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  fontSize: "40px",
+                  fontWeight: 700,
+                  textTransform: "lowercase",
+                }}
+              >
+                {account[0]?.toLowerCase()}
+              </div>
+            )}
             <div style={{ display: "flex", flexDirection: "column" }}>
               <span style={{ fontSize: "48px", fontWeight: 800, color: "#101816" }}>
                 {account}

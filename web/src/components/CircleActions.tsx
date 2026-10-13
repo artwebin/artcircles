@@ -73,7 +73,7 @@ export function CircleActions({
   const isOrganizer = account === organizer;
 
   const isOrderSet = members.some(m => m.slot !== 0);
-  const allApproved = members.length > 0 && members.every(m => m.approved === 1);
+  const allApproved = members.length > 0 && members.every(m => !!m.approved);
 
   // --- Handlers using Confirmation Sheet ---
   const handleJoin = () => {
@@ -182,7 +182,7 @@ export function CircleActions({
       pollCondition: async () => {
         const updated = await getMembers(circleId);
         const myMem = updated.find((m: any) => m.account === account);
-        return myMem ? myMem.approved === 1 : false;
+        return myMem ? !!myMem.approved : false;
       },
     });
   };
@@ -331,7 +331,7 @@ export function CircleActions({
       } else {
         // Order is set, waiting for approvals
         if (!allApproved) {
-          if (me && me.approved === 0) {
+          if (me && !me.approved) {
             actionButton = (
               <button className="btn-primary" onClick={handleApprove}>
                 Approve payout order (You are #{me.slot})

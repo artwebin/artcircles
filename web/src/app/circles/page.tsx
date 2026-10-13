@@ -122,7 +122,7 @@ export default function MyCirclesPage() {
     } else if (c.state === 0) { // Forming
       const isFull = c.membersList.length >= c.maxMembers;
       const isOrderSet = c.membersList.some((m: any) => m.slot !== 0);
-      const allApproved = c.membersList.length > 0 && c.membersList.every((m: any) => m.approved === 1);
+      const allApproved = c.membersList.length > 0 && c.membersList.every((m: any) => !!m.approved);
 
       if (isFull && !isOrderSet && c.isOrganizer) {
         needsActionCircles.push({
@@ -130,7 +130,7 @@ export default function MyCirclesPage() {
           reason: "All seats are filled. Set the payout order to proceed.",
           ctaText: "Set order"
         });
-      } else if (isOrderSet && !allApproved && c.myMember && c.myMember.approved === 0) {
+      } else if (isOrderSet && !allApproved && c.myMember && !c.myMember.approved) {
         needsActionCircles.push({
           circle: c,
           reason: `Payout order needs your approval (you are #${c.myMember.slot}).`,

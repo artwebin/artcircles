@@ -55,14 +55,13 @@ export function getReputationCopy(c: number, m: number, d: number) {
   }
 }
 
-// 6 deterministic muted avatar palettes as required by brief
+// Deterministic member avatar tones matching blue, purple, rust, slate from CircleRing.tsx
+// Gold and green are reserved for the pot and the current user.
 export const AVATAR_PALETTES = [
-  { bg: "#E4EEEA", text: "#0B5A4E" }, // brand subtle
-  { bg: "#FBEFD6", text: "#7A5208" }, // pot subtle
-  { bg: "#E8EEF5", text: "#1E4C7A" }, // soft blue
-  { bg: "#EBF2F0", text: "#17493D" }, // deep sage
-  { bg: "#EEF0EE", text: "#2E3A36" }, // soft slate
-  { bg: "#F8ECE7", text: "#8A3C1E" }, // warm coral
+  { bg: "#DCE8F2", text: "#1F4E8C" }, // blue (modra)
+  { bg: "#E9E1F3", text: "#5B3F8F" }, // purple (vijolična)
+  { bg: "#F3E3DC", text: "#8A3B1C" }, // rust (rjava)
+  { bg: "#E3E7EC", text: "#3E4A57" }, // slate (siva)
 ];
 
 export function getAvatarColor(account: string) {
@@ -72,4 +71,45 @@ export function getAvatarColor(account: string) {
   }
   const index = Math.abs(hash) % AVATAR_PALETTES.length;
   return AVATAR_PALETTES[index];
+}
+
+/**
+ * Validates and normalizes on-chain avatar from usersinfo.avatar (base64).
+ * Only allows PNG, JPEG, WebP, and GIF. Rejects SVG and all other formats.
+ * Rejects avatars larger than 200 KB in binary bytes.
+ */
+export function getValidAvatarUrl(avatar: string | null | undefined): string | null {
+  if (!avatar || typeof avatar !== "string") return null;
+  const trimmed = avatar.trim();
+  if (!trimmed) return null;
+
+  let base64Data = trimmed;
+  let mime: "png" | "jpeg" | "webp" | "gif" | null = null;
+
+  if (trimmed.startsWith("data:")) {
+    const match = trimmed.match(/^data:image\/(png|jpeg|jpg|webp|gif);base64,/i);
+    if (!match) return null; // rejects SVG, xml, etc.
+    mime = match[1].toLowerCase() === "jpg" ? "jpeg" : (match[1].toLowerCase() as any);
+    base64Data = trimmed.slice(match[0].length);
+  }
+
+  // Size limit: 200 KB binary = 204,800 bytes
+  const binaryByteLength = Math.floor((base64Data.length * 3) / 4);
+  if (binaryByteLength > 200 * 1024) return null;
+
+  // Detect magic bytes if mime wasn't explicitly given in data URI
+  if (!mime) {
+    if (base64Data.startsWith("/9j/")) {
+      mime = "jpeg";
+    } else if (base64Data.startsWith("iVBORw0KGgo")) {
+      mime = "png";
+    } else if (base64Data.startsWith("R0lGOD")) {
+      mime = "gif";
+    } else if (base64Data.startsWith("UklGR")) {
+      mime = "webp";
+    }
+  }
+
+  if (!mime) return null;
+  return `data:image/${mime};base64,${base64Data}`;
 }

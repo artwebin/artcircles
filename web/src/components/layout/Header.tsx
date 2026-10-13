@@ -5,11 +5,32 @@ import Link from "next/link";
 import Image from "next/image";
 import { useProton } from "@/components/ProtonProvider";
 import { LogOut, ShieldCheck, Bell, LayoutGrid, PlusCircle, User, ChevronDown } from "lucide-react";
+import { getAccountInfo } from "@/lib/rpc";
+import { getAvatarColor, getValidAvatarUrl } from "@/lib/reputation";
 
 export function Header() {
   const { session, login, logout } = useProton();
   const [menuOpen, setMenuOpen] = React.useState(false);
+  const [avatarUrl, setAvatarUrl] = React.useState<string | null>(null);
   const menuRef = React.useRef<HTMLDivElement>(null);
+
+  React.useEffect(() => {
+    if (!session?.auth?.actor) {
+      setAvatarUrl(null);
+      return;
+    }
+    let active = true;
+    getAccountInfo(session.auth.actor)
+      .then((info) => {
+        if (active && info?.avatar) {
+          setAvatarUrl(getValidAvatarUrl(info.avatar));
+        }
+      })
+      .catch(() => {});
+    return () => {
+      active = false;
+    };
+  }, [session?.auth?.actor]);
 
   React.useEffect(() => {
     if (!menuOpen) return;
@@ -79,9 +100,39 @@ export function Header() {
                   style={{ display: "flex", alignItems: "center", gap: "8px", padding: "4px" }}
                   onClick={() => setMenuOpen(!menuOpen)}
                 >
-                  <div style={{ width: "32px", height: "32px", borderRadius: "50%", background: "var(--surface-muted)", display: "flex", alignItems: "center", justifyContent: "center", fontWeight: "bold" }}>
-                    {session.auth.actor[0].toUpperCase()}
-                  </div>
+                  {avatarUrl ? (
+                    <img
+                      src={avatarUrl}
+                      alt=""
+                      style={{
+                        width: "32px",
+                        height: "32px",
+                        borderRadius: "50%",
+                        objectFit: "cover",
+                        flexShrink: 0,
+                      }}
+                    />
+                  ) : (
+                    <div
+                      style={{
+                        width: "32px",
+                        height: "32px",
+                        borderRadius: "50%",
+                        backgroundColor: session?.auth?.actor ? getAvatarColor(session.auth.actor).bg : "var(--surface-muted)",
+                        color: session?.auth?.actor ? getAvatarColor(session.auth.actor).text : "var(--text)",
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        fontWeight: "700",
+                        fontSize: "15px",
+                        fontFamily: "var(--font-heading)",
+                        textTransform: "lowercase",
+                        flexShrink: 0,
+                      }}
+                    >
+                      {session?.auth?.actor ? session.auth.actor[0].toLowerCase() : ""}
+                    </div>
+                  )}
                   <span className="desktop-only text-label">{session.auth.actor}</span>
                   <ChevronDown size={14} className="desktop-only" style={{ color: "var(--text-secondary)", transition: "transform 150ms", transform: menuOpen ? "rotate(180deg)" : "none" }} />
                 </button>
