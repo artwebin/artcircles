@@ -3,11 +3,23 @@ export const RPC_ENDPOINTS = [
   "https://proton-testnet.eoscafeblock.com",
 ];
 
-async function fetchWithFailover(path: string, body: any) {
+const rpcCache = new Map<string, { data: any; expiry: number }>();
+
+export function clearRpcCache() {
+  rpcCache.clear();
+}
+
+async function fetchWithFailover(path: string, body: any, ttlMs = 10000) {
+  const cacheKey = `${path}:${JSON.stringify(body)}`;
+  const cached = rpcCache.get(cacheKey);
+  if (cached && Date.now() < cached.expiry) {
+    return cached.data;
+  }
+
   for (const endpoint of RPC_ENDPOINTS) {
     try {
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 6000);
+      const timeoutId = setTimeout(() => controller.abort(), 4000);
       const response = await fetch(`${endpoint}${path}`, {
         method: "POST",
         headers: {
@@ -24,6 +36,7 @@ async function fetchWithFailover(path: string, body: any) {
         throw new Error(`Expected JSON but got ${contentType}`);
       }
       const data = await response.json();
+      rpcCache.set(cacheKey, { data, expiry: Date.now() + ttlMs });
       return data;
     } catch (e) {
       console.warn(`RPC endpoint ${endpoint} failed`, e);
@@ -155,6 +168,43 @@ export async function getXusdcBalance(account: string): Promise<number> {
     console.warn("Failed to fetch XUSDC balance", e);
     return 0;
   }
+}
+
+export async function getChainAccount(account: string): Promise<{ exists: boolean; created: string | null }> {
+  const cacheKey = `get_account:${account}`;
+  const cached = rpcCache.get(cacheKey);
+  if (cached && Date.now() < cached.expiry) {
+    return cached.data;
+  }
+
+  for (const endpoint of RPC_ENDPOINTS) {
+    try {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 4000);
+      const response = await fetch(`${endpoint}/v1/chain/get_account`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ account_name: account }),
+        signal: controller.signal,
+      });
+      clearTimeout(timeoutId);
+      if (response.status === 400 || response.status === 404 || response.status === 500) {
+        const res = { exists: false, created: null };
+        rpcCache.set(cacheKey, { data: res, expiry: Date.now() + 10000 });
+        return res;
+      }
+      if (!response.ok) continue;
+      const data = await response.json();
+      if (data && data.account_name === account) {
+        const res = { exists: true, created: data.created || null };
+        rpcCache.set(cacheKey, { data: res, expiry: Date.now() + 10000 });
+        return res;
+      }
+    } catch (e) {
+      // try next endpoint
+    }
+  }
+  return { exists: false, created: null };
 }
 
 

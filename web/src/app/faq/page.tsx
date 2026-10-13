@@ -6,6 +6,7 @@ import { Footer } from "@/components/layout/Footer";
 import { ChevronDown, HelpCircle } from "lucide-react";
 
 interface FAQItem {
+  id?: string;
   q: string;
   a: React.ReactNode;
 }
@@ -84,6 +85,15 @@ const FAQS: FAQItem[] = [
     )
   },
   {
+    id: "reputation",
+    q: "How is reputation counted?",
+    a: (
+      <p>
+        When a circle ends, the contract records for every member whether they stayed until the end, how many payments they missed, and whether their deposit ran out. The profile shows those numbers as they are on chain. Nobody, including us, can edit them. A circle that is still running is not counted until it ends.
+      </p>
+    )
+  },
+  {
     q: "How do I get payment reminders?",
     a: (
       <p>
@@ -95,6 +105,19 @@ const FAQS: FAQItem[] = [
 
 export default function FAQPage() {
   const [openIdx, setOpenIdx] = useState<number | null>(0);
+
+  React.useEffect(() => {
+    if (typeof window !== "undefined" && window.location.hash === "#reputation") {
+      const repIdx = FAQS.findIndex((f) => f.id === "reputation");
+      if (repIdx !== -1) {
+        setOpenIdx(repIdx);
+        setTimeout(() => {
+          const el = document.getElementById("reputation");
+          if (el) el.scrollIntoView({ behavior: "smooth" });
+        }, 100);
+      }
+    }
+  }, []);
 
   const toggle = (idx: number) => {
     setOpenIdx(openIdx === idx ? null : idx);
@@ -144,6 +167,7 @@ export default function FAQPage() {
               return (
                 <div 
                   key={idx} 
+                  id={faq.id}
                   className="card"
                   style={{ 
                     padding: 0, 
