@@ -86,6 +86,20 @@ export class Reputation extends Table {
     get primary(): u64 { return this.account.N; }
 }
 
+// Index of circles per account, so an account's circles can be read without scanning every circle.
+// scope = account, one row per circle the account organizes or is a member of
+@table("memberships")
+export class Membership extends Table {
+    constructor(
+        public circle: u64 = 0,
+        public organizer: bool = false,
+        public member: bool = false
+    ) { super(); }
+
+    @primary
+    get primary(): u64 { return this.circle; }
+}
+
 function parseId(s: string): u64 {
     check(s.length > 0 && s.length <= 19, "Invalid circle id");
     let v: u64 = 0;
@@ -106,6 +120,39 @@ export class artcircles extends Contract {
 
     membersOf(id: u64): TableStore<Member> {
         return new TableStore<Member>(this.receiver, Name.fromU64(id));
+    }
+
+    membershipsOf(account: Name): TableStore<Membership> {
+        return new TableStore<Membership>(this.receiver, account);
+    }
+
+    // Records that an account organizes and/or is a member of a circle. RAM is paid by the contract.
+    markMembership(account: Name, id: u64, asOrganizer: bool, asMember: bool): void {
+        const index = this.membershipsOf(account);
+        const row = index.get(id);
+        if (row == null) {
+            index.store(new Membership(id, asOrganizer, asMember), this.contract);
+            return;
+        }
+        let changed = false;
+        if (asOrganizer && !row!.organizer) { row!.organizer = true; changed = true; }
+        if (asMember && !row!.member) { row!.member = true; changed = true; }
+        if (changed) index.update(row!, SAME_PAYER);
+    }
+
+    // Removes the member flag; the row is erased unless the account also organizes the circle.
+    unmarkMember(account: Name, id: u64): void {
+        const index = this.membershipsOf(account);
+        const row = index.get(id);
+        if (row == null) return;
+        if (row!.organizer) {
+            if (row!.member) {
+                row!.member = false;
+                index.update(row!, SAME_PAYER);
+            }
+        } else {
+            index.remove(row!);
+        }
     }
 
     @action("create")
@@ -138,6 +185,7 @@ export class artcircles extends Contract {
             depositRounds, 0
         );
         this.circles.store(circle, organizer);
+        this.markMembership(organizer, id, true, false);
     }
 
     // Joining a circle = a single deposit transfer with memo "join:<id>"
@@ -184,6 +232,7 @@ export class artcircles extends Contract {
         members.store(new Member(account, 0, quantity, 0, false, 0, currentTimeSec(), false, 0, 0, false), this.contract);
         circle.members += 1;
         this.circles.update(circle, SAME_PAYER);
+        this.markMembership(account, id, false, true);
     }
 
     // Paying the current round = a transfer with memo "pay:<id>"
@@ -380,6 +429,7 @@ export class artcircles extends Contract {
         members.remove(m);
         circle.members -= 1;
         this.circles.update(circle, SAME_PAYER);
+        this.unmarkMember(account, id);
 
         // Membership changed, the agreed order is no longer valid
         this.clearOrder(id);
@@ -469,6 +519,7 @@ export class artcircles extends Contract {
         while (m) {
             const next = members.next(m);
             sendTransferToken(TOKEN_CONTRACT, this.contract, m.account, m.deposit, `artcircles: circle ${id} cancelled, deposit refund`);
+            this.unmarkMember(m.account, id);
             members.remove(m);
             m = next;
         }
@@ -476,5 +527,19 @@ export class artcircles extends Contract {
         circle.members = 0;
         circle.state = STATE_CANCELLED;
         this.circles.update(circle, SAME_PAYER);
+    }
+
+    // Rebuilds the memberships index for one circle. Only for circles created before the index existed.
+    @action("reindex")
+    reindex(id: u64): void {
+        requireAuth(this.contract);
+        const circle = this.circles.requireGet(id, "Circle not found");
+        this.markMembership(circle.organizer, id, true, false);
+        const members = this.membersOf(id);
+        let m = members.first();
+        while (m) {
+            this.markMembership(m.account, id, false, true);
+            m = members.next(m);
+        }
     }
 }

@@ -394,3 +394,74 @@ describe("KYC circles", () => {
     expect(members(0)).to.have.length(1);
   });
 });
+
+describe("memberships index", () => {
+  const index = (acc: string) =>
+    circles.tables.memberships(nameToBigInt(Name.from(acc))).getTableRows();
+
+  it("create records the organizer", () => {
+    expect(index("alice")).to.deep.equal([{ circle: 0, organizer: true, member: false }]);
+  });
+  it("join records the member", async () => {
+    await join("bob");
+    expect(index("bob")).to.deep.equal([{ circle: 0, organizer: false, member: true }]);
+  });
+  it("organizer joining their own circle has both flags in one row", async () => {
+    await join("alice");
+    expect(index("alice")).to.deep.equal([{ circle: 0, organizer: true, member: true }]);
+  });
+  it("leave removes the member row", async () => {
+    await join("bob");
+    await circles.actions.leave(["bob", 0]).send("bob@active");
+    expect(index("bob")).to.have.length(0);
+  });
+  it("organizer leaving keeps the organizer row", async () => {
+    await join("alice");
+    await circles.actions.leave(["alice", 0]).send("alice@active");
+    expect(index("alice")).to.deep.equal([{ circle: 0, organizer: true, member: false }]);
+  });
+  it("cancel removes member rows and keeps the organizer row", async () => {
+    await join("alice");
+    await join("bob");
+    await circles.actions.cancel(["alice", 0]).send("alice@active");
+    expect(index("bob")).to.have.length(0);
+    expect(index("alice")).to.deep.equal([{ circle: 0, organizer: true, member: false }]);
+  });
+  it("lists every circle of an account", async () => {
+    await circles.actions.create(["bob", "Work", AMOUNT, 2, WEEK, false, 1]).send("bob@active");
+    await join("alice", "join:1");
+    expect(index("alice")).to.deep.equal([
+      { circle: 0, organizer: true, member: false },
+      { circle: 1, organizer: false, member: true },
+    ]);
+  });
+  it("rows stay after a circle completes", async () => {
+    await join("alice");
+    await join("bob");
+    await join("carol");
+    await circles.actions.setorder(["alice", 0, ["alice", "bob", "carol"]]).send("alice@active");
+    for (const acc of ["alice", "bob", "carol"]) {
+      await circles.actions.approve([acc, 0]).send(`${acc}@active`);
+    }
+    await circles.actions.start(["alice", 0]).send("alice@active");
+    for (let round = 0; round < 3; round++) {
+      for (const acc of ["alice", "bob", "carol"]) {
+        await xtokens.actions.transfer([acc, "artcircles", AMOUNT, "pay:0"]).send(`${acc}@active`);
+      }
+      await circles.actions.payout([0]).send("bob@active");
+    }
+    expect(circle().state).to.equal(2);
+    expect(index("carol")).to.deep.equal([{ circle: 0, organizer: false, member: true }]);
+  });
+  it("reindex requires the contract's own authority", async () => {
+    await expectToThrow(circles.actions.reindex([0]).send("alice@active"), "missing required authority artcircles");
+  });
+  it("reindex is idempotent and keeps existing flags", async () => {
+    await join("alice");
+    await join("bob");
+    await circles.actions.reindex([0]).send("artcircles@active");
+    await circles.actions.reindex([0]).send("artcircles@active");
+    expect(index("alice")).to.deep.equal([{ circle: 0, organizer: true, member: true }]);
+    expect(index("bob")).to.deep.equal([{ circle: 0, organizer: false, member: true }]);
+  });
+});

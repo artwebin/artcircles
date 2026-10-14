@@ -42,6 +42,10 @@ The result: not paying never pays off. A member who defaults after receiving kee
 
 When a circle completes, every member's record in the `reputation` table is updated: completed circles, missed payments, and defaults. The record follows the account across all circles.
 
+## Circles per account
+
+The `memberships` table (scope = account) lists every circle an account organizes or is a member of, so apps can show an account's circles without scanning all of them. Rows are written by `create`, `join`, `leave` and `cancel`, and stay after a circle completes.
+
 ## Using the contract
 
 All payments are plain XUSDC transfers to `artcircles` with a memo. The contract never asks for permission changes. **If anything claiming to be artcircles asks you to change your account permissions, it is not artcircles.**
@@ -63,6 +67,7 @@ Any other memo, a wrong amount, or a token other than XUSDC from `xtokens` is re
 | `payout` | anyone | Pay out the current round |
 | `leave` | member | Leave before start, deposit refunded |
 | `cancel` | organizer | Cancel before start, all deposits refunded |
+| `reindex` | contract | Rebuild the `memberships` rows of one circle (for circles created before the index existed) |
 
 ## Trust model
 
