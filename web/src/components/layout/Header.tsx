@@ -12,11 +12,13 @@ export function Header() {
   const { session, login, logout } = useProton();
   const [menuOpen, setMenuOpen] = React.useState(false);
   const [avatarUrl, setAvatarUrl] = React.useState<string | null>(null);
+  const [avatarFailed, setAvatarFailed] = React.useState(false);
   const menuRef = React.useRef<HTMLDivElement>(null);
 
   React.useEffect(() => {
     if (!session?.auth?.actor) {
       setAvatarUrl(null);
+      setAvatarFailed(false);
       return;
     }
     let active = true;
@@ -100,10 +102,13 @@ export function Header() {
                   style={{ display: "flex", alignItems: "center", gap: "8px", padding: "4px" }}
                   onClick={() => setMenuOpen(!menuOpen)}
                 >
-                  {avatarUrl ? (
+                  {avatarUrl && !avatarFailed ? (
                     <img
                       src={avatarUrl}
                       alt=""
+                      referrerPolicy="no-referrer"
+                      loading="lazy"
+                      onError={() => setAvatarFailed(true)}
                       style={{
                         width: "32px",
                         height: "32px",

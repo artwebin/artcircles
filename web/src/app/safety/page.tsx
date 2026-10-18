@@ -30,7 +30,7 @@ export default function SafetyPage() {
               Rules you can check, not promises.
             </h1>
             <p className="text-body-lg" style={{ color: "var(--text-secondary)" }}>
-              Your money is held by the smart contract, not by a person. The contract has no function that lets anyone, including us, withdraw it outside the rules. On testnet the contract account is controlled by artwebin. Before mainnet, control moves to a 3-of-5 multisig of independent XPR block producers.
+              Your money is held by the smart contract, not by a person. The contract has no function that lets anyone, including us, withdraw it outside the rules. On testnet the contract is already controlled by a 3-of-5 multisig. Before mainnet, the same setup moves to five independent XPR block producers.
             </p>
           </div>
 
@@ -111,7 +111,7 @@ export default function SafetyPage() {
             </h2>
             <div className="card">
               <p className="text-body" style={{ fontSize: "15px", color: "var(--text)", marginBottom: "12px" }}>
-                On testnet the contract account is controlled by artwebin. Before mainnet, control moves to five independent XPR block producers, and any change to the contract needs three of them to sign. You can check this yourself in the account&apos;s permissions on the explorer.
+                On testnet the contract is already controlled by a 3-of-5 multisig held by test accounts. Before mainnet, the same setup moves to five independent XPR block producers, and any change to the contract needs three of them to sign. You can check this yourself in the account’s permissions on the explorer.
               </p>
               <p className="text-caption" style={{ color: "var(--text-secondary)" }}>
                 The contract, the automated keeper, and the Telegram bot are open source on GitHub with 48 automated test suites passing.

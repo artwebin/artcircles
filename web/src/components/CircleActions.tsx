@@ -453,6 +453,7 @@ export function CircleActions({
       {sheetConfig && (
         <ConfirmationSheet
           {...sheetConfig}
+          circleId={circleId}
           account={account}
           onClose={() => setSheetConfig(null)}
           onSuccess={() => {

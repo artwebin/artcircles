@@ -2,6 +2,7 @@ import Link from "next/link";
 import { Footer } from "@/components/layout/Footer";
 import { Check } from "lucide-react";
 import CircleRing, { HERO_EXAMPLE } from "@/components/CircleRing";
+import { PROOF_CIRCLE_ID } from "@/lib/config";
 
 export default function LandingPage() {
   return (
@@ -208,7 +209,7 @@ export default function LandingPage() {
             </div>
             
             <div className="card" style={{ background: "var(--bg)", border: "none" }}>
-              <h3 className="text-h3" style={{ marginBottom: "8px" }}>Testnet circle #1</h3>
+              <h3 className="text-h3" style={{ marginBottom: "8px" }}>Testnet circle #{PROOF_CIRCLE_ID}</h3>
               <p className="text-caption" style={{ marginBottom: "24px" }}>Three members, 10.00 USDC a round. Member C stopped paying on purpose.</p>
               
               <div style={{ display: "flex", flexDirection: "column", gap: "1px", background: "var(--border)", border: "1px solid var(--border)", borderRadius: "var(--radius-md)", overflow: "hidden" }}>
@@ -235,7 +236,7 @@ export default function LandingPage() {
               </div>
               
               <div style={{ marginTop: "24px" }}>
-                <Link href="/c/1" style={{ color: "var(--brand)", fontWeight: 500, fontSize: "14px", textDecoration: "underline", textUnderlineOffset: "4px" }}>See the transactions</Link>
+                <Link href={`/c/${PROOF_CIRCLE_ID}`} style={{ color: "var(--brand)", fontWeight: 500, fontSize: "14px", textDecoration: "underline", textUnderlineOffset: "4px" }}>See the transactions</Link>
               </div>
             </div>
           </section>
@@ -252,7 +253,7 @@ export default function LandingPage() {
               <div style={{ marginBottom: "var(--space-48)" }}>
                 <h3 className="text-h3" style={{ marginBottom: "12px", color: "var(--on-deep)" }}>Who controls the contract</h3>
                 <p className="text-body" style={{ color: "var(--on-deep-muted)" }}>
-                  On testnet the contract account is controlled by artwebin. Before mainnet, control moves to five independent XPR block producers, and any change to the contract needs three of them to sign. You can check this yourself in the account&apos;s permissions on the explorer.
+                  On testnet the contract is already controlled by a 3-of-5 multisig held by test accounts. Before mainnet, the same setup moves to five independent XPR block producers, and any change to the contract needs three of them to sign. You can check this yourself in the account’s permissions on the explorer.
                 </p>
               </div>
 

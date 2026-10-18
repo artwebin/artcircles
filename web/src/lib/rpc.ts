@@ -1,7 +1,45 @@
-export const RPC_ENDPOINTS = [
+const DEFAULT_TESTNET_ENDPOINTS = [
   "https://rpc.api.testnet.metalx.com",
   "https://proton-testnet.eoscafeblock.com",
+  "https://test.proton.eosusa.io",
+  "https://tn1.protonnz.com",
+  "https://api-xprnetwork-test.saltant.io",
 ];
+
+const DEFAULT_MAINNET_ENDPOINTS = [
+  "https://rpc.api.metalx.com",
+  "https://proton.eoscafeblock.com",
+  "https://proton.eosusa.io",
+  "https://xpr.cryptolions.io",
+];
+
+function getRpcEndpoints(): string[] {
+  const isMainnet =
+    typeof process !== "undefined" &&
+    (process.env.NEXT_PUBLIC_CHAIN_NETWORK === "mainnet" || process.env.NEXT_PUBLIC_NETWORK === "mainnet");
+
+  if (typeof process !== "undefined") {
+    if (isMainnet && process.env.NEXT_PUBLIC_RPC_ENDPOINTS_MAINNET) {
+      return process.env.NEXT_PUBLIC_RPC_ENDPOINTS_MAINNET.split(",")
+        .map((s) => s.trim())
+        .filter(Boolean);
+    }
+    if (!isMainnet && process.env.NEXT_PUBLIC_RPC_ENDPOINTS_TESTNET) {
+      return process.env.NEXT_PUBLIC_RPC_ENDPOINTS_TESTNET.split(",")
+        .map((s) => s.trim())
+        .filter(Boolean);
+    }
+    if (process.env.NEXT_PUBLIC_RPC_ENDPOINTS) {
+      return process.env.NEXT_PUBLIC_RPC_ENDPOINTS.split(",")
+        .map((s) => s.trim())
+        .filter(Boolean);
+    }
+  }
+
+  return isMainnet ? DEFAULT_MAINNET_ENDPOINTS : DEFAULT_TESTNET_ENDPOINTS;
+}
+
+export const RPC_ENDPOINTS = getRpcEndpoints();
 
 const rpcCache = new Map<string, { data: any; expiry: number }>();
 
@@ -16,19 +54,30 @@ async function fetchWithFailover(path: string, body: any, ttlMs = 10000) {
     return cached.data;
   }
 
+  const headers: Record<string, string> = {
+    "Content-Type": "application/json",
+  };
+  if (typeof window === "undefined") {
+    headers["User-Agent"] = "XPRCircles/1.0 (+https://circles.artwebin.com)";
+  }
+
   for (const endpoint of RPC_ENDPOINTS) {
     try {
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), 4000);
       const response = await fetch(`${endpoint}${path}`, {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
+        headers,
         body: JSON.stringify(body),
         signal: controller.signal,
       });
       clearTimeout(timeoutId);
+
+      // On rate-limit or service-unavailable, immediately switch to next endpoint
+      if (response.status === 429 || response.status === 503) {
+        console.warn(`RPC endpoint ${endpoint} returned ${response.status}, switching immediately`);
+        continue;
+      }
 
       if (!response.ok) throw new Error(`HTTP ${response.status}`);
       const contentType = response.headers.get("content-type") || "";
@@ -46,6 +95,53 @@ async function fetchWithFailover(path: string, body: any, ttlMs = 10000) {
   throw new Error("All RPC endpoints failed");
 }
 
+export interface GetAllRowsParams {
+  code: string;
+  scope: string | number;
+  table: string;
+  lower_bound?: string | number;
+  upper_bound?: string | number;
+  limit?: number;
+  key_type?: string;
+  index_position?: string | number;
+  reverse?: boolean;
+  json?: boolean;
+}
+
+/**
+ * Paginates through a contract table until more: false using next_key as lower_bound.
+ */
+export async function getAllRows<T = any>(params: GetAllRowsParams, batchLimit = 100): Promise<T[]> {
+  const allRows: T[] = [];
+  let lowerBound = params.lower_bound ?? 0;
+  let hasMore = true;
+
+  while (hasMore) {
+    const data = await fetchWithFailover("/v1/chain/get_table_rows", {
+      ...params,
+      scope: String(params.scope),
+      limit: batchLimit,
+      lower_bound: lowerBound,
+      json: true,
+    });
+
+    const rows: T[] = data?.rows || [];
+    if (rows.length === 0) break;
+
+    for (const r of rows) {
+      allRows.push(r);
+    }
+
+    if (data.more && data.next_key && String(data.next_key) !== String(lowerBound)) {
+      lowerBound = data.next_key;
+    } else {
+      hasMore = false;
+    }
+  }
+
+  return allRows;
+}
+
 export async function getCircle(id: string) {
   const data = await fetchWithFailover("/v1/chain/get_table_rows", {
     code: "artcircles",
@@ -60,14 +156,25 @@ export async function getCircle(id: string) {
 }
 
 export async function getMembers(id: string) {
-  const data = await fetchWithFailover("/v1/chain/get_table_rows", {
+  return getAllRows({
     code: "artcircles",
     scope: id,
     table: "members",
-    limit: 100, // max members is 50, so 100 is safe
-    json: true,
   });
-  return data.rows || [];
+}
+
+export interface MembershipRow {
+  circle: number;
+  organizer: number;
+  member: number;
+}
+
+export async function getMemberships(account: string): Promise<MembershipRow[]> {
+  return getAllRows<MembershipRow>({
+    code: "artcircles",
+    scope: account,
+    table: "memberships",
+  });
 }
 
 export async function getChainTime() {
@@ -75,65 +182,31 @@ export async function getChainTime() {
   return new Date(data.head_block_time).getTime() / 1000;
 }
 
-export async function getCircles(limit = 20, reverse = true) {
-  const data = await fetchWithFailover("/v1/chain/get_table_rows", {
-    code: "artcircles",
-    scope: "artcircles",
-    table: "circles",
-    limit,
-    reverse,
-    json: true,
-  });
-  return data.rows || [];
-}
 
 /**
- * Paginates through the entire circles table using more / next_key
- * so older circles do not disappear as the table grows.
+ * Reads circles for account via the memberships table (scope = account),
+ * and fetches each circle and member list in parallel.
  */
-export async function getAllCircles(): Promise<any[]> {
-  const allRows: any[] = [];
-  let lowerBound: string | number = 0;
-  let hasMore = true;
-
-  while (hasMore) {
-    const data = await fetchWithFailover("/v1/chain/get_table_rows", {
-      code: "artcircles",
-      scope: "artcircles",
-      table: "circles",
-      limit: 100,
-      lower_bound: lowerBound,
-      json: true,
-    });
-
-    const rows = data?.rows || [];
-    if (rows.length === 0) break;
-
-    for (const r of rows) {
-      if (!allRows.some((existing) => existing.id === r.id)) {
-        allRows.push(r);
-      }
-    }
-
-    if (data.more && data.next_key) {
-      lowerBound = data.next_key;
-    } else {
-      hasMore = false;
-    }
+export async function getMyCircles(account: string) {
+  const memberships = await getMemberships(account);
+  if (memberships.length === 0) {
+    return [];
   }
 
-  return allRows.sort((a, b) => Number(b.id) - Number(a.id));
-}
-
-export async function getMyCircles(account: string) {
-  const startTime = Date.now();
-  const circles = await getAllCircles();
   const circlesWithMembers = await Promise.all(
-    circles.map(async (circle: any) => {
+    memberships.map(async (m) => {
+      const circleId = String(m.circle);
       try {
-        const members = await getMembers(String(circle.id));
-        const myMember = members.find((m: any) => m.account === account);
+        const [circle, members] = await Promise.all([
+          getCircle(circleId),
+          getMembers(circleId),
+        ]);
+
+        if (!circle) return null;
+
+        const myMember = members.find((mem: any) => mem.account === account);
         const isOrganizer = circle.organizer === account;
+
         return {
           ...circle,
           membersList: members,
@@ -142,23 +215,15 @@ export async function getMyCircles(account: string) {
           isMember: !!myMember,
         };
       } catch (e) {
-        return {
-          ...circle,
-          membersList: [],
-          myMember: null,
-          isOrganizer: circle.organizer === account,
-          isMember: false,
-        };
+        console.warn(`Failed to fetch circle #${circleId} for account ${account}`, e);
+        return null;
       }
     })
   );
 
-  const duration = Date.now() - startTime;
-  if (duration > 1000) {
-    console.warn(`[PERF WARNING] getMyCircles for account "${account}" took ${duration}ms (>1000ms). Secondary index needed.`);
-  }
-
-  return circlesWithMembers.filter((c: any) => c.isMember || c.isOrganizer);
+  return circlesWithMembers
+    .filter((c): c is NonNullable<typeof c> => c !== null && (c.isMember || c.isOrganizer))
+    .sort((a, b) => Number(b.id) - Number(a.id));
 }
 
 export async function getReputation(account: string) {
@@ -227,13 +292,22 @@ export async function getChainAccount(account: string): Promise<{ exists: boolea
     try {
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), 4000);
+      const headers: Record<string, string> = { "Content-Type": "application/json" };
+      if (typeof window === "undefined") {
+        headers["User-Agent"] = "XPRCircles/1.0 (+https://circles.artwebin.com)";
+      }
       const response = await fetch(`${endpoint}/v1/chain/get_account`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers,
         body: JSON.stringify({ account_name: account }),
         signal: controller.signal,
       });
       clearTimeout(timeoutId);
+
+      if (response.status === 429 || response.status === 503) {
+        lastError = new Error(`Endpoint ${endpoint} returned status ${response.status}`);
+        continue;
+      }
 
       const contentType = response.headers.get("content-type") || "";
       let data: any = null;

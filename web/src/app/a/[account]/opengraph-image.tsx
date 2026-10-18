@@ -1,6 +1,6 @@
 import { ImageResponse } from "next/og";
 import { getReputation, getAccountInfo } from "@/lib/rpc";
-import { getReputationCopy, getAvatarColor, getValidAvatarUrl } from "@/lib/reputation";
+import { getReputationCopy, getAvatarColor, getValidAvatarUrl, isBase64Avatar } from "@/lib/reputation";
 
 export const runtime = "nodejs";
 export const size = { width: 1200, height: 630 };
@@ -26,7 +26,8 @@ export default async function Image({ params }: { params: Promise<{ account: str
   const { completed: c, missed: m, defaulted: d } = reputation;
   const { state, sentence } = getReputationCopy(c, m, d);
   const avatarColor = getAvatarColor(account);
-  const validAvatarUrl = getValidAvatarUrl(userInfo?.avatar);
+  const rawAvatarUrl = getValidAvatarUrl(userInfo?.avatar);
+  const validAvatarUrl = isBase64Avatar(rawAvatarUrl) ? rawAvatarUrl : null;
 
   // Colors per reputation state
   let bandBg = "#F5F6F3";

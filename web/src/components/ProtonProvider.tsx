@@ -3,9 +3,11 @@
 import React, { createContext, useContext, useState, useEffect } from "react";
 import ProtonWebSDK from "@proton/web-sdk";
 
+import { RPC_ENDPOINTS } from "@/lib/rpc";
+
 interface ProtonContextType {
   session: any;
-  login: () => Promise<void>;
+  login: () => Promise<any>;
   logout: () => Promise<void>;
 }
 
@@ -16,12 +18,6 @@ const appIdentifier = {
   requestAccount: "artcircles",
 };
 
-const endpoints = [
-  "https://rpc.api.testnet.metalx.com",
-  "https://proton-testnet.eoscafeblock.com",
-  "https://test.proton.eosusa.io",
-];
-
 export function ProtonProvider({ children }: { children: React.ReactNode }) {
   const [session, setSession] = useState<any>(null);
 
@@ -29,12 +25,12 @@ export function ProtonProvider({ children }: { children: React.ReactNode }) {
     // Try to restore session on mount
     const restore = async () => {
       try {
-        const result = await ProtonWebSDK({
-          linkOptions: { endpoints, restoreSession: true },
+        const res: any = await ProtonWebSDK({
+          linkOptions: { endpoints: RPC_ENDPOINTS, restoreSession: true },
           transportOptions: { requestAccount: appIdentifier.requestAccount },
         });
-        if (result.session) {
-          setSession(result.session);
+        if (res?.session && !res?.error) {
+          setSession(res.session);
         }
       } catch (e) {
         console.log("No previous session found");
@@ -45,15 +41,21 @@ export function ProtonProvider({ children }: { children: React.ReactNode }) {
 
   const login = async () => {
     try {
-      const result = await ProtonWebSDK({
-        linkOptions: { endpoints },
+      const res: any = await ProtonWebSDK({
+        linkOptions: { endpoints: RPC_ENDPOINTS },
         transportOptions: { requestAccount: appIdentifier.requestAccount },
       });
-      if (result.session) {
-        setSession(result.session);
+      if (res?.session && !res?.error) {
+        setSession(res.session);
+        return res.session;
       }
+      if (res?.error) {
+        console.warn("ProtonWebSDK login error:", res.error);
+      }
+      return null;
     } catch (e) {
       console.error("Login failed", e);
+      return null;
     }
   };
 

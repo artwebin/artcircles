@@ -60,6 +60,7 @@ export function ProfileView({
   const [copied, setCopied] = useState(false);
   const [canShare, setCanShare] = useState(false);
   const [showAllPast, setShowAllPast] = useState(false);
+  const [avatarFailed, setAvatarFailed] = useState(false);
 
   useEffect(() => {
     setIsMounted(true);
@@ -172,11 +173,14 @@ export function ProfileView({
       <div className="profile-page-container">
         {/* Full-width Identity Block above the columns */}
         <div className="identity-block">
-          {validAvatarUrl ? (
+          {validAvatarUrl && !avatarFailed ? (
             <img
               src={validAvatarUrl}
               alt=""
               className="avatar-circle"
+              referrerPolicy="no-referrer"
+              loading="lazy"
+              onError={() => setAvatarFailed(true)}
               style={{ objectFit: "cover" }}
             />
           ) : (

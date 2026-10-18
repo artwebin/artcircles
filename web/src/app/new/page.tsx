@@ -4,8 +4,9 @@ import React, { useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { useProton } from "@/components/ProtonProvider";
-import { getCircles } from "@/lib/rpc";
+import { getMemberships } from "@/lib/rpc";
 import { formatContractError } from "@/lib/errors";
+import { runTransaction } from "@/lib/transact";
 import toast from "react-hot-toast";
 import { 
   ChevronLeft, 
@@ -37,7 +38,25 @@ export default function NewCirclePage() {
 
   // Submission state
   const [loading, setLoading] = useState(false);
+  const [checkingNetwork, setCheckingNetwork] = useState(false);
+  const [showPopupNotice, setShowPopupNotice] = useState(false);
+  const [unconfirmed, setUnconfirmed] = useState(false);
+  const [retryCooldown, setRetryCooldown] = useState(0);
   const [error, setError] = useState<string | null>(null);
+
+  const popupTimerRef = React.useRef<NodeJS.Timeout | null>(null);
+
+  React.useEffect(() => {
+    let timer: NodeJS.Timeout | null = null;
+    if (unconfirmed && retryCooldown > 0) {
+      timer = setInterval(() => {
+        setRetryCooldown((prev) => (prev > 0 ? prev - 1 : 0));
+      }, 1000);
+    }
+    return () => {
+      if (timer) clearInterval(timer);
+    };
+  }, [unconfirmed, retryCooldown]);
   const [nameError, setNameError] = useState<string | null>(null);
   const [amountError, setAmountError] = useState<string | null>(null);
 
@@ -119,71 +138,88 @@ export default function NewCirclePage() {
       return;
     }
     setLoading(true);
+    setCheckingNetwork(false);
     setError(null);
+    setUnconfirmed(false);
+    setShowPopupNotice(false);
+
+    if (popupTimerRef.current) clearTimeout(popupTimerRef.current);
+    popupTimerRef.current = setTimeout(() => {
+      setShowPopupNotice(true);
+    }, 4000);
 
     try {
-      // Find highest circle ID prior to broadcast
-      let prevHighestId = -1;
+      let prevIds = new Set<string>();
       try {
-        const existing = await getCircles(5, true);
-        if (existing.length > 0) {
-          prevHighestId = Math.max(...existing.map((r: any) => Number(r.id)));
-        }
+        const existing = await getMemberships(session.auth.actor);
+        prevIds = new Set(existing.map((m: any) => String(m.circle)));
       } catch (e) {
-        console.warn("Could not query previous circles before creating", e);
+        console.warn("Could not query previous memberships before creating", e);
       }
 
       const formattedAmount = parsedAmount.toFixed(6) + " XUSDC";
 
-      await session.transact(
+      const actions = [
         {
-          actions: [
-            {
-              account: "artcircles",
-              name: "create",
-              authorization: [session.auth],
-              data: {
-                organizer: session.auth.actor,
-                name: name.trim(),
-                amount: formattedAmount,
-                maxMembers: maxMembers,
-                periodSec: periodSec,
-                requireKyc: requireKyc ? 1 : 0,
-                depositRounds: depositRounds,
-              },
-            },
-          ],
+          account: "artcircles",
+          name: "create",
+          authorization: [session.auth],
+          data: {
+            organizer: session.auth.actor,
+            name: name.trim(),
+            amount: formattedAmount,
+            maxMembers: maxMembers,
+            periodSec: periodSec,
+            requireKyc: requireKyc ? 1 : 0,
+            depositRounds: depositRounds,
+          },
         },
-        { broadcast: true }
-      );
+      ];
 
-      toast.success("Circle created successfully!");
-
-      // Poll for the new circle id
-      let newCircleId: number | null = null;
-      for (let attempt = 0; attempt < 6; attempt++) {
-        await new Promise((r) => setTimeout(r, 1000));
+      const pollCondition = async () => {
         try {
-          const fresh = await getCircles(10, true);
-          const found = fresh.find(
-            (r: any) =>
-              Number(r.id) > prevHighestId &&
-              r.organizer === session.auth.actor &&
-              r.name === name.trim()
-          );
+          const fresh = await getMemberships(session.auth.actor);
+          const found = fresh.find((m: any) => !prevIds.has(String(m.circle)));
           if (found) {
-            newCircleId = found.id;
-            break;
+            return String(found.circle);
           }
-        } catch (e) {
-          // ignore retry errors
+        } catch {
+          // ignore polling errors
         }
-      }
+        return false;
+      };
 
-      if (newCircleId !== null) {
-        router.push(`/c/${newCircleId}`);
-      } else {
-        router.push("/circles");
+      const result = await runTransaction(session, actions, pollCondition, {
+        onStatusChange: (status) => {
+          if (status === "checking") {
+            if (popupTimerRef.current) clearTimeout(popupTimerRef.current);
+            setShowPopupNotice(false);
+            setCheckingNetwork(true);
+          }
+        },
+      });
+
+      if (popupTimerRef.current) clearTimeout(popupTimerRef.current);
+      setShowPopupNotice(false);
+      setCheckingNetwork(false);
+
+      if (result.success) {
+        toast.success("Circle created successfully!");
+        const newCircleId = result.data;
+        if (newCircleId) {
+          router.push(`/c/${newCircleId}`);
+        } else {
+          router.push("/circles");
+        }
+      } else if (result.status === "cancelled") {
+        toast("You cancelled in your wallet. Nothing was sent.");
+      } else if (result.status === "ignored") {
+        // ignore
+      } else if (result.status === "contract_error") {
+        setError(result.message);
+      } else if (result.status === "unconfirmed") {
+        setUnconfirmed(true);
+        setRetryCooldown(15);
       }
     } catch (err: any) {
       console.error(err);
@@ -191,6 +227,7 @@ export default function NewCirclePage() {
       setError(formatted.message);
     } finally {
       setLoading(false);
+      if (popupTimerRef.current) clearTimeout(popupTimerRef.current);
     }
   };
 
@@ -606,6 +643,53 @@ export default function NewCirclePage() {
                   </p>
                 </div>
 
+                {/* Pop-up blocked warning */}
+                {loading && showPopupNotice && (
+                  <div
+                    style={{
+                      background: "var(--warning-bg)",
+                      border: "1px solid #F6D799",
+                      color: "var(--warning-text)",
+                      padding: "12px 16px",
+                      borderRadius: "var(--radius-md)",
+                      marginBottom: "var(--space-20)",
+                      fontSize: "14px",
+                      lineHeight: 1.4,
+                    }}
+                  >
+                    No wallet window? Allow pop-ups for this site, then tap again.
+                  </div>
+                )}
+
+                {/* Unconfirmed warning */}
+                {unconfirmed && (
+                  <div
+                    style={{
+                      padding: "16px",
+                      background: "var(--warning-bg)",
+                      border: "1px solid #F6D799",
+                      color: "var(--warning-text)",
+                      borderRadius: "var(--radius-md)",
+                      marginBottom: "var(--space-24)",
+                      display: "flex",
+                      flexDirection: "column",
+                      gap: "10px",
+                    }}
+                  >
+                    <div style={{ display: "flex", alignItems: "center", gap: "10px", fontWeight: 600 }}>
+                      <AlertCircle size={20} />
+                      <span>We could not confirm this. Check the circle before you try again.</span>
+                    </div>
+                    <Link
+                      href="/circles"
+                      className="btn-secondary"
+                      style={{ alignSelf: "flex-start", marginTop: "4px" }}
+                    >
+                      View my circles
+                    </Link>
+                  </div>
+                )}
+
                 {/* Error Banner */}
                 {error && (
                   <div style={{ 
@@ -639,10 +723,20 @@ export default function NewCirclePage() {
                     type="button"
                     className="btn-primary btn-large"
                     onClick={handleCreateCircle}
-                    disabled={loading}
+                    disabled={(loading && !showPopupNotice) || retryCooldown > 0}
                     style={{ flex: 1 }}
                   >
-                    {loading ? "Confirming on wallet..." : !session ? "Log in with WebAuth to create" : "Create circle"}
+                    {loading
+                      ? showPopupNotice
+                        ? "Tap to try again"
+                        : checkingNetwork
+                        ? "Checking the network…"
+                        : "Confirming on wallet..."
+                      : !session
+                      ? "Log in with WebAuth to create"
+                      : retryCooldown > 0
+                      ? `Wait ${retryCooldown}s to retry`
+                      : "Create circle"}
                   </button>
                 </div>
               </div>

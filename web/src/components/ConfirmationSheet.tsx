@@ -4,7 +4,8 @@ import React, { useState, useEffect, useRef } from "react";
 import { useProton } from "./ProtonProvider";
 import { getXusdcBalance } from "@/lib/rpc";
 import { formatContractError } from "@/lib/errors";
-import { ExternalLink, ShieldCheck, AlertCircle } from "lucide-react";
+import { runTransaction } from "@/lib/transact";
+import { ExternalLink, ShieldCheck, AlertCircle, HelpCircle } from "lucide-react";
 
 export interface ConfirmationSheetProps {
   isOpen: boolean;
@@ -18,6 +19,7 @@ export interface ConfirmationSheetProps {
   account: string;
   actions: any[];
   successSentence: string;
+  circleId?: string | number;
   pollCondition?: () => Promise<boolean>;
   onSuccess: () => void;
 }
@@ -34,19 +36,21 @@ export function ConfirmationSheet({
   account,
   actions,
   successSentence,
+  circleId,
   pollCondition,
   onSuccess,
 }: ConfirmationSheetProps) {
   const { session } = useProton();
   const [balance, setBalance] = useState<number | null>(null);
   const [loadingBalance, setLoadingBalance] = useState(false);
-  const [status, setStatus] = useState<"confirm" | "wallet" | "pending" | "success" | "timeout">("confirm");
+  const [status, setStatus] = useState<"confirm" | "wallet" | "checking" | "pending" | "success" | "unconfirmed">("confirm");
   const [cancelledInWallet, setCancelledInWallet] = useState(false);
+  const [showPopupNotice, setShowPopupNotice] = useState(false);
+  const [retryCooldown, setRetryCooldown] = useState(0);
   const [error, setError] = useState<{ message: string; rawDetails?: string } | null>(null);
   const [txId, setTxId] = useState<string | null>(null);
 
-  const pollIntervalRef = useRef<NodeJS.Timeout | null>(null);
-  const timeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const popupTimerRef = useRef<NodeJS.Timeout | null>(null);
 
   // Load balance when opened
   useEffect(() => {
@@ -66,13 +70,27 @@ export function ConfirmationSheet({
     if (isOpen) {
       setStatus("confirm");
       setCancelledInWallet(false);
+      setShowPopupNotice(false);
+      setRetryCooldown(0);
       setError(null);
       setTxId(null);
     } else {
-      if (pollIntervalRef.current) clearInterval(pollIntervalRef.current);
-      if (timeoutRef.current) clearTimeout(timeoutRef.current);
+      if (popupTimerRef.current) clearTimeout(popupTimerRef.current);
     }
   }, [isOpen]);
+
+  // Cooldown countdown for unconfirmed retry
+  useEffect(() => {
+    let timer: NodeJS.Timeout | null = null;
+    if (status === "unconfirmed" && retryCooldown > 0) {
+      timer = setInterval(() => {
+        setRetryCooldown((prev) => (prev > 0 ? prev - 1 : 0));
+      }, 1000);
+    }
+    return () => {
+      if (timer) clearInterval(timer);
+    };
+  }, [status, retryCooldown]);
 
   if (!isOpen) return null;
 
@@ -84,57 +102,51 @@ export function ConfirmationSheet({
     setStatus("wallet");
     setError(null);
     setCancelledInWallet(false);
+    setShowPopupNotice(false);
 
-    try {
-      const result: any = await session.transact({ actions }, { broadcast: true });
-      const transactionId = result?.processed?.id || result?.transaction_id || "";
-      setTxId(transactionId);
-      setStatus("pending");
+    if (popupTimerRef.current) clearTimeout(popupTimerRef.current);
+    popupTimerRef.current = setTimeout(() => {
+      setShowPopupNotice(true);
+    }, 4000);
 
-      // Set 15-second timeout for slow block propagation
-      timeoutRef.current = setTimeout(() => {
-        setStatus("timeout");
-      }, 15000);
+    const result = await runTransaction(session, actions, pollCondition, {
+      circleId,
+      onStatusChange: (newStatus, details) => {
+        if (newStatus === "checking") {
+          if (popupTimerRef.current) clearTimeout(popupTimerRef.current);
+          setShowPopupNotice(false);
+          setStatus("checking");
+        } else if (newStatus === "pending") {
+          if (popupTimerRef.current) clearTimeout(popupTimerRef.current);
+          setShowPopupNotice(false);
+          setStatus("pending");
+          if (details?.txId) setTxId(details.txId);
+        }
+      },
+    });
 
-      // Start 1-second chain polling
-      if (pollCondition) {
-        pollIntervalRef.current = setInterval(async () => {
-          try {
-            const confirmed = await pollCondition();
-            if (confirmed) {
-              if (pollIntervalRef.current) clearInterval(pollIntervalRef.current);
-              if (timeoutRef.current) clearTimeout(timeoutRef.current);
-              setStatus("success");
-              setTimeout(() => {
-                onSuccess();
-                onClose();
-              }, 1500);
-            }
-          } catch (e) {
-            console.warn("Polling error", e);
-          }
-        }, 1000);
-      } else {
-        // Default 2 second fallback if no custom pollCondition provided
-        setTimeout(() => {
-          setStatus("success");
-          setTimeout(() => {
-            onSuccess();
-            onClose();
-          }, 1500);
-        }, 2000);
-      }
-    } catch (e: any) {
-      console.warn("Wallet error", e);
-      const msg = e?.message || "";
-      if (msg.includes("cancel") || msg.includes("reject") || msg.includes("User rejected")) {
-        setCancelledInWallet(true);
-        setStatus("confirm");
-      } else {
-        const formatted = formatContractError(e);
-        setError(formatted);
-        setStatus("confirm");
-      }
+    if (popupTimerRef.current) clearTimeout(popupTimerRef.current);
+    setShowPopupNotice(false);
+
+    if (result.success) {
+      if (result.txId) setTxId(result.txId);
+      setStatus("success");
+      setTimeout(() => {
+        onSuccess();
+        onClose();
+      }, 1500);
+    } else if (result.status === "cancelled") {
+      setCancelledInWallet(true);
+      setStatus("confirm");
+    } else if (result.status === "ignored") {
+      setStatus("confirm");
+    } else if (result.status === "contract_error") {
+      setError({ message: result.message, rawDetails: result.rawDetails });
+      setStatus("confirm");
+    } else if (result.status === "unconfirmed") {
+      if (result.txId) setTxId(result.txId);
+      setStatus("unconfirmed");
+      setRetryCooldown(15);
     }
   };
 
@@ -297,8 +309,26 @@ export function ConfirmationSheet({
               </p>
             </div>
 
+            {/* Pop-up blocked warning */}
+            {status === "wallet" && showPopupNotice && (
+              <div
+                style={{
+                  background: "var(--warning-bg)",
+                  border: "1px solid #F6D799",
+                  color: "var(--warning-text)",
+                  padding: "12px 16px",
+                  borderRadius: "var(--radius-md)",
+                  marginTop: "var(--space-16)",
+                  fontSize: "14px",
+                  lineHeight: 1.4,
+                }}
+              >
+                No wallet window? Allow pop-ups for this site, then tap again.
+              </div>
+            )}
+
             {/* Actions */}
-            <div style={{ display: "flex", gap: "12px" }}>
+            <div style={{ display: "flex", gap: "12px", marginTop: "var(--space-16)" }}>
               <button
                 type="button"
                 className="btn-secondary btn-large"
@@ -312,16 +342,43 @@ export function ConfirmationSheet({
                 type="button"
                 className="btn-primary btn-large"
                 onClick={handleContinueToWallet}
-                disabled={hasInsufficientBalance || loadingBalance || status === "wallet"}
+                disabled={hasInsufficientBalance || loadingBalance || (status === "wallet" && !showPopupNotice)}
                 style={{ flex: 1 }}
               >
-                {status === "wallet" ? "Waiting for wallet..." : "Continue to wallet"}
+                {status === "wallet"
+                  ? showPopupNotice
+                    ? "Tap to try again"
+                    : "Waiting for wallet..."
+                  : "Continue to wallet"}
               </button>
             </div>
           </div>
         )}
 
-        {/* State 2: Pending on chain */}
+        {/* State 2: Checking the network */}
+        {status === "checking" && (
+          <div style={{ textAlign: "center", padding: "var(--space-24) 0" }} aria-live="polite">
+            <div
+              style={{
+                width: "48px",
+                height: "48px",
+                borderRadius: "50%",
+                border: "3px solid var(--border)",
+                borderTopColor: "var(--brand)",
+                margin: "0 auto var(--space-20)",
+                animation: "spin 0.8s linear infinite",
+              }}
+            />
+            <h3 className="text-h3" style={{ fontSize: "20px", marginBottom: "8px" }}>
+              Checking the network…
+            </h3>
+            <p className="text-body" style={{ color: "var(--text-secondary)", marginBottom: "var(--space-20)" }}>
+              We are checking if your transaction was received on chain.
+            </p>
+          </div>
+        )}
+
+        {/* State 3: Pending on chain */}
         {status === "pending" && (
           <div style={{ textAlign: "center", padding: "var(--space-24) 0" }} aria-live="polite">
             <div
@@ -362,7 +419,7 @@ export function ConfirmationSheet({
           </div>
         )}
 
-        {/* State 3: Success with stroke check animation */}
+        {/* State 4: Success with stroke check animation */}
         {status === "success" && (
           <div style={{ textAlign: "center", padding: "var(--space-24) 0" }} aria-live="polite">
             <div
@@ -402,45 +459,66 @@ export function ConfirmationSheet({
           </div>
         )}
 
-        {/* State 4: Timeout after 15s */}
-        {status === "timeout" && (
-          <div style={{ textAlign: "center", padding: "var(--space-20) 0" }}>
-            <h3 className="text-h3" style={{ fontSize: "18px", marginBottom: "8px" }}>
-              Submitted, still confirming
+        {/* State 5: Unconfirmed */}
+        {status === "unconfirmed" && (
+          <div style={{ textAlign: "center", padding: "var(--space-24) 0" }} aria-live="polite">
+            <div
+              style={{
+                width: "56px",
+                height: "56px",
+                borderRadius: "50%",
+                background: "var(--warning-bg)",
+                color: "var(--warning-text)",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                margin: "0 auto var(--space-16)",
+              }}
+            >
+              <HelpCircle size={32} />
+            </div>
+            <h3 className="text-h3" style={{ fontSize: "20px", marginBottom: "8px" }}>
+              Could not confirm
             </h3>
-            <p className="text-body" style={{ color: "var(--text-secondary)", marginBottom: "var(--space-20)" }}>
-              Your transaction was sent to the network. It may take a moment to appear.
+            <p className="text-body" style={{ color: "var(--text-secondary)", marginBottom: "var(--space-24)", lineHeight: 1.5 }}>
+              We could not confirm this. Check the circle before you try again.
             </p>
             {txId && (
-              <a
-                href={`https://testnet.explorer.xprnetwork.org/transaction/${txId}`}
-                target="_blank"
-                rel="noreferrer"
-                style={{
-                  display: "inline-flex",
-                  alignItems: "center",
-                  gap: "6px",
-                  color: "var(--brand)",
-                  fontSize: "14px",
-                  fontWeight: 600,
-                  textDecoration: "underline",
-                  marginBottom: "var(--space-24)",
-                }}
-              >
-                View on explorer <ExternalLink size={14} />
-              </a>
+              <div style={{ marginBottom: "var(--space-20)" }}>
+                <a
+                  href={`https://testnet.explorer.xprnetwork.org/transaction/${txId}`}
+                  target="_blank"
+                  rel="noreferrer"
+                  style={{
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: "6px",
+                    color: "var(--brand)",
+                    fontSize: "14px",
+                    fontWeight: 600,
+                    textDecoration: "underline",
+                  }}
+                >
+                  View on explorer <ExternalLink size={14} />
+                </a>
+              </div>
             )}
-            <div>
+            <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
+              <a
+                href={circleId ? `/c/${circleId}` : "/circles"}
+                className="btn-primary"
+                style={{ width: "100%", textAlign: "center", textDecoration: "none" }}
+              >
+                Check the circle
+              </a>
               <button
                 type="button"
-                className="btn-primary"
-                onClick={() => {
-                  onSuccess();
-                  onClose();
-                }}
+                className="btn-secondary"
+                disabled={retryCooldown > 0}
+                onClick={() => setStatus("confirm")}
                 style={{ width: "100%" }}
               >
-                Close
+                {retryCooldown > 0 ? `Wait ${retryCooldown}s to retry` : "Try again"}
               </button>
             </div>
           </div>

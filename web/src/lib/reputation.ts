@@ -74,15 +74,34 @@ export function getAvatarColor(account: string) {
 }
 
 /**
- * Validates and normalizes on-chain avatar from usersinfo.avatar (base64).
- * Only allows PNG, JPEG, WebP, and GIF. Rejects SVG and all other formats.
- * Rejects avatars larger than 200 KB in binary bytes.
+ * Validates and normalizes on-chain avatar from usersinfo.avatar.
+ * Supports:
+ * 1. https:// URLs (rejects http://, javascript:, and all other schemes)
+ * 2. Base64 data (PNG, JPEG, WebP, GIF up to 200 KB in binary bytes, rejects SVG)
  */
 export function getValidAvatarUrl(avatar: string | null | undefined): string | null {
   if (!avatar || typeof avatar !== "string") return null;
   const trimmed = avatar.trim();
   if (!trimmed) return null;
 
+  // 1. HTTPS URL support
+  if (trimmed.startsWith("https://")) {
+    try {
+      const parsed = new URL(trimmed);
+      if (parsed.protocol === "https:") {
+        return trimmed;
+      }
+    } catch (e) {
+      return null;
+    }
+  }
+
+  // Reject all other URL schemes explicitly
+  if (/^[a-zA-Z][a-zA-Z0-9+.-]*:/.test(trimmed) && !trimmed.startsWith("data:image/")) {
+    return null;
+  }
+
+  // 2. Base64 support
   let base64Data = trimmed;
   let mime: "png" | "jpeg" | "webp" | "gif" | null = null;
 
@@ -113,3 +132,8 @@ export function getValidAvatarUrl(avatar: string | null | undefined): string | n
   if (!mime) return null;
   return `data:image/${mime};base64,${base64Data}`;
 }
+
+export function isBase64Avatar(url: string | null | undefined): boolean {
+  return typeof url === "string" && url.startsWith("data:image/");
+}
+

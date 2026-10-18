@@ -19,6 +19,7 @@ import {
 } from "lucide-react";
 import { Footer } from "@/components/layout/Footer";
 import { formatContractError } from "@/lib/errors";
+import { runTransaction } from "@/lib/transact";
 
 export default function SetOrderPage({ params }: { params: Promise<{ id: string }> }) {
   const router = useRouter();
@@ -31,10 +32,28 @@ export default function SetOrderPage({ params }: { params: Promise<{ id: string 
   const [order, setOrder] = useState<string[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [saving, setSaving] = useState<boolean>(false);
+  const [checkingNetwork, setCheckingNetwork] = useState<boolean>(false);
+  const [showPopupNotice, setShowPopupNotice] = useState<boolean>(false);
+  const [unconfirmed, setUnconfirmed] = useState<boolean>(false);
+  const [retryCooldown, setRetryCooldown] = useState<number>(0);
   const [error, setError] = useState<string | null>(null);
+
+  const popupTimerRef = React.useRef<NodeJS.Timeout | null>(null);
 
   // Drag and drop state
   const [draggedIdx, setDraggedIdx] = useState<number | null>(null);
+
+  useEffect(() => {
+    let timer: NodeJS.Timeout | null = null;
+    if (unconfirmed && retryCooldown > 0) {
+      timer = setInterval(() => {
+        setRetryCooldown((prev) => (prev > 0 ? prev - 1 : 0));
+      }, 1000);
+    }
+    return () => {
+      if (timer) clearInterval(timer);
+    };
+  }, [unconfirmed, retryCooldown]);
 
   useEffect(() => {
     let isMounted = true;
@@ -152,35 +171,75 @@ export default function SetOrderPage({ params }: { params: Promise<{ id: string 
   const handleSaveOrder = async () => {
     if (!session || !isOrganizer) return;
     setSaving(true);
+    setCheckingNetwork(false);
     setError(null);
+    setUnconfirmed(false);
+    setShowPopupNotice(false);
+
+    if (popupTimerRef.current) clearTimeout(popupTimerRef.current);
+    popupTimerRef.current = setTimeout(() => {
+      setShowPopupNotice(true);
+    }, 4000);
+
+    const actions = [
+      {
+        account: "artcircles",
+        name: "setorder",
+        authorization: [session.auth],
+        data: {
+          organizer: session.auth.actor,
+          id: circleId,
+          order: order,
+        },
+      },
+    ];
+
+    const pollCondition = async () => {
+      try {
+        const m = await getMembers(circleId);
+        if (m && m.length > 0 && m.some((mem: any) => mem.slot !== 0)) {
+          return true;
+        }
+      } catch {}
+      return false;
+    };
 
     try {
-      await session.transact(
-        {
-          actions: [
-            {
-              account: "artcircles",
-              name: "setorder",
-              authorization: [session.auth],
-              data: {
-                organizer: session.auth.actor,
-                id: circleId,
-                order: order,
-              },
-            },
-          ],
+      const result = await runTransaction(session, actions, pollCondition, {
+        circleId,
+        onStatusChange: (status) => {
+          if (status === "checking") {
+            if (popupTimerRef.current) clearTimeout(popupTimerRef.current);
+            setShowPopupNotice(false);
+            setCheckingNetwork(true);
+          }
         },
-        { broadcast: true }
-      );
+      });
 
-      toast.success("Payout order saved! Members will now be asked to approve.", { duration: 4000 });
-      router.push(`/c/${circleId}`);
+      if (popupTimerRef.current) clearTimeout(popupTimerRef.current);
+      setShowPopupNotice(false);
+      setCheckingNetwork(false);
+
+      if (result.success) {
+        toast.success("Payout order saved! Members will now be asked to approve.", { duration: 4000 });
+        router.push(`/c/${circleId}`);
+      } else if (result.status === "cancelled") {
+        toast("You cancelled in your wallet. Nothing was sent.");
+      } else if (result.status === "ignored") {
+        // ignore
+      } else if (result.status === "contract_error") {
+        setError(result.message);
+      } else if (result.status === "unconfirmed") {
+        setUnconfirmed(true);
+        setRetryCooldown(15);
+      }
     } catch (err: any) {
       console.error(err);
       const formatted = formatContractError(err);
       setError(formatted.message);
     } finally {
       setSaving(false);
+      if (popupTimerRef.current) clearTimeout(popupTimerRef.current);
     }
   };
 
@@ -414,6 +473,53 @@ export default function SetOrderPage({ params }: { params: Promise<{ id: string 
           })}
         </div>
 
+        {/* Pop-up blocked warning */}
+        {saving && showPopupNotice && (
+          <div
+            style={{
+              background: "var(--warning-bg)",
+              border: "1px solid #F6D799",
+              color: "var(--warning-text)",
+              padding: "12px 16px",
+              borderRadius: "var(--radius-md)",
+              marginBottom: "var(--space-20)",
+              fontSize: "14px",
+              lineHeight: 1.4,
+            }}
+          >
+            No wallet window? Allow pop-ups for this site, then tap again.
+          </div>
+        )}
+
+        {/* Unconfirmed warning */}
+        {unconfirmed && (
+          <div
+            style={{
+              padding: "16px",
+              background: "var(--warning-bg)",
+              border: "1px solid #F6D799",
+              color: "var(--warning-text)",
+              borderRadius: "var(--radius-md)",
+              marginBottom: "var(--space-24)",
+              display: "flex",
+              flexDirection: "column",
+              gap: "10px",
+            }}
+          >
+            <div style={{ display: "flex", alignItems: "center", gap: "10px", fontWeight: 600 }}>
+              <AlertCircle size={20} />
+              <span>We could not confirm this. Check the circle before you try again.</span>
+            </div>
+            <Link
+              href={`/c/${circleId}`}
+              className="btn-secondary"
+              style={{ alignSelf: "flex-start", marginTop: "4px" }}
+            >
+              Check the circle
+            </Link>
+          </div>
+        )}
+
         {/* Error message banner */}
         {error && (
           <div style={{ 
@@ -441,10 +547,18 @@ export default function SetOrderPage({ params }: { params: Promise<{ id: string 
             type="button"
             className="btn-primary btn-large"
             onClick={handleSaveOrder}
-            disabled={saving}
+            disabled={(saving && !showPopupNotice) || retryCooldown > 0}
             style={{ flex: 1 }}
           >
-            {saving ? "Confirming on wallet..." : "Save order"}
+            {saving
+              ? showPopupNotice
+                ? "Tap to try again"
+                : checkingNetwork
+                ? "Checking the network…"
+                : "Confirming on wallet..."
+              : retryCooldown > 0
+              ? `Wait ${retryCooldown}s to retry`
+              : "Save order"}
           </button>
         </div>
       </div>
