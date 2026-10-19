@@ -4,7 +4,7 @@ import React, { useState, useEffect, use } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { useProton } from "@/components/ProtonProvider";
-import { getCircle, getMembers } from "@/lib/rpc";
+import { getCircle, getMembers, clearRpcCache } from "@/lib/rpc";
 import toast from "react-hot-toast";
 import { 
   ChevronLeft, 
@@ -19,7 +19,7 @@ import {
 } from "lucide-react";
 import { Footer } from "@/components/layout/Footer";
 import { formatContractError } from "@/lib/errors";
-import { runTransaction } from "@/lib/transact";
+import { runTransaction, isBrowserWebAuth } from "@/lib/transact";
 
 export default function SetOrderPage({ params }: { params: Promise<{ id: string }> }) {
   const router = useRouter();
@@ -27,6 +27,8 @@ export default function SetOrderPage({ params }: { params: Promise<{ id: string 
   const circleId = resolvedParams.id;
 
   const { session, login } = useProton();
+  const isBrowser = isBrowserWebAuth(session);
+  const attemptRef = React.useRef(0);
   const [circle, setCircle] = useState<any>(null);
   const [members, setMembers] = useState<any[]>([]);
   const [order, setOrder] = useState<string[]>([]);
@@ -170,6 +172,7 @@ export default function SetOrderPage({ params }: { params: Promise<{ id: string 
   // Save order to chain
   const handleSaveOrder = async () => {
     if (!session || !isOrganizer) return;
+    const currentAttempt = ++attemptRef.current;
     setSaving(true);
     setCheckingNetwork(false);
     setError(null);
@@ -178,7 +181,9 @@ export default function SetOrderPage({ params }: { params: Promise<{ id: string 
 
     if (popupTimerRef.current) clearTimeout(popupTimerRef.current);
     popupTimerRef.current = setTimeout(() => {
-      setShowPopupNotice(true);
+      if (currentAttempt === attemptRef.current) {
+        setShowPopupNotice(true);
+      }
     }, 4000);
 
     const actions = [
@@ -196,9 +201,10 @@ export default function SetOrderPage({ params }: { params: Promise<{ id: string 
 
     const pollCondition = async () => {
       try {
-        const m = await getMembers(circleId);
-        if (m && m.length > 0 && m.some((mem: any) => mem.slot !== 0)) {
-          return true;
+        const m = await getMembers(circleId, { fresh: true });
+        if (m && m.length > 0) {
+          const slotMap = new Map(m.map((mem: any) => [mem.account, mem.slot]));
+          return order.every((acc, idx) => slotMap.get(acc) === idx + 1);
         }
       } catch {}
       return false;
@@ -208,6 +214,7 @@ export default function SetOrderPage({ params }: { params: Promise<{ id: string 
       const result = await runTransaction(session, actions, pollCondition, {
         circleId,
         onStatusChange: (status) => {
+          if (currentAttempt !== attemptRef.current) return;
           if (status === "checking") {
             if (popupTimerRef.current) clearTimeout(popupTimerRef.current);
             setShowPopupNotice(false);
@@ -216,11 +223,16 @@ export default function SetOrderPage({ params }: { params: Promise<{ id: string 
         },
       });
 
+      if (currentAttempt !== attemptRef.current) {
+        return;
+      }
+
       if (popupTimerRef.current) clearTimeout(popupTimerRef.current);
       setShowPopupNotice(false);
       setCheckingNetwork(false);
 
       if (result.success) {
+        clearRpcCache();
         toast.success("Payout order saved! Members will now be asked to approve.", { duration: 4000 });
         router.push(`/c/${circleId}`);
       } else if (result.status === "cancelled") {
@@ -234,12 +246,15 @@ export default function SetOrderPage({ params }: { params: Promise<{ id: string 
         setRetryCooldown(15);
       }
     } catch (err: any) {
+      if (currentAttempt !== attemptRef.current) return;
       console.error(err);
       const formatted = formatContractError(err);
       setError(formatted.message);
     } finally {
-      setSaving(false);
-      if (popupTimerRef.current) clearTimeout(popupTimerRef.current);
+      if (currentAttempt === attemptRef.current) {
+        setSaving(false);
+        if (popupTimerRef.current) clearTimeout(popupTimerRef.current);
+      }
     }
   };
 
@@ -473,22 +488,39 @@ export default function SetOrderPage({ params }: { params: Promise<{ id: string 
           })}
         </div>
 
-        {/* Pop-up blocked warning */}
+        {/* Pop-up blocked warning or wallet app notice */}
         {saving && showPopupNotice && (
-          <div
-            style={{
-              background: "var(--warning-bg)",
-              border: "1px solid #F6D799",
-              color: "var(--warning-text)",
-              padding: "12px 16px",
-              borderRadius: "var(--radius-md)",
-              marginBottom: "var(--space-20)",
-              fontSize: "14px",
-              lineHeight: 1.4,
-            }}
-          >
-            No wallet window? Allow pop-ups for this site, then tap again.
-          </div>
+          isBrowser ? (
+            <div
+              style={{
+                background: "var(--warning-bg)",
+                border: "1px solid #F6D799",
+                color: "var(--warning-text)",
+                padding: "12px 16px",
+                borderRadius: "var(--radius-md)",
+                marginBottom: "var(--space-20)",
+                fontSize: "14px",
+                lineHeight: 1.4,
+              }}
+            >
+              No wallet window? Allow pop-ups for this site, then tap again.
+            </div>
+          ) : (
+            <div
+              style={{
+                background: "var(--surface-muted)",
+                border: "1px solid var(--border)",
+                color: "var(--text-secondary)",
+                padding: "12px 16px",
+                borderRadius: "var(--radius-md)",
+                marginBottom: "var(--space-20)",
+                fontSize: "14px",
+                lineHeight: 1.4,
+              }}
+            >
+              Check your wallet app to approve.
+            </div>
+          )
         )}
 
         {/* Unconfirmed warning */}
@@ -547,11 +579,11 @@ export default function SetOrderPage({ params }: { params: Promise<{ id: string 
             type="button"
             className="btn-primary btn-large"
             onClick={handleSaveOrder}
-            disabled={(saving && !showPopupNotice) || retryCooldown > 0}
+            disabled={(saving && (!isBrowser || !showPopupNotice)) || retryCooldown > 0}
             style={{ flex: 1 }}
           >
             {saving
-              ? showPopupNotice
+              ? isBrowser && showPopupNotice
                 ? "Tap to try again"
                 : checkingNetwork
                 ? "Checking the network…"

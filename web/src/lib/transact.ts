@@ -1,4 +1,5 @@
 import { formatContractError } from "@/lib/errors";
+import { clearRpcCache } from "@/lib/rpc";
 
 export type TransactionStatus =
   | "wallet"
@@ -33,31 +34,78 @@ export type RunTransactionResult =
       txId?: string;
     };
 
+/**
+ * Checks if the current session uses the in-browser WebAuth wallet popup
+ * (which can be blocked by browser popup blockers), vs a mobile or desktop wallet app.
+ */
+export function isBrowserWebAuth(session: any): boolean {
+  if (!session) return false;
+  return session.link?.walletType === "webauth" || session.walletType === "webauth";
+}
+
+export function isTryingToLoginError(error: any): boolean {
+  if (!error) return false;
+  const msg = typeof error === "string" ? error : error.message || "";
+  return /trying to login/i.test(msg);
+}
+
+/**
+ * Checks for on-chain contract assertion failure (e.g. eosio_assert).
+ */
+export function isContractAssertionError(error: any): boolean {
+  if (!error) return false;
+  if (isTryingToLoginError(error)) return false;
+
+  const msg = typeof error === "string" ? error : (typeof error.message === "string" ? error.message : "");
+  if (/assertion failure|eosio_assert/i.test(msg)) return true;
+
+  const jsonError = error.json?.error || error.error?.json?.error;
+  if (jsonError) {
+    if (jsonError.name?.includes("eosio_assert")) return true;
+    if (jsonError.code === 3050003 || jsonError.code === 3050004) return true;
+    if (jsonError.what && /assertion failure|eosio_assert/i.test(jsonError.what)) return true;
+    if (Array.isArray(jsonError.details)) {
+      for (const d of jsonError.details) {
+        if (d.message && /assertion failure|eosio_assert/i.test(d.message)) return true;
+      }
+    }
+  }
+  return false;
+}
+
+/**
+ * Checks ONLY error.code and error.message for user cancellation in wallet.
+ * Explicitly does NOT inspect JSON.stringify(error) or error.json so that
+ * contract errors containing words like 'cancel' are not misclassified.
+ */
 export function isCancelError(error: any): boolean {
   if (!error) return false;
   if (error.code === "E_CANCEL" || error.code === "E_WALLET_TYPE") return true;
-  if (error.message === "Closed") return true;
-  const msg = typeof error === "string" ? error : error.message || error.reason || JSON.stringify(error);
-  if (/cancel|reject|user closed|user rejected/i.test(msg)) {
+
+  const msg = typeof error === "string" ? error : (typeof error.message === "string" ? error.message : "");
+  if (!msg) return false;
+  if (msg === "Closed") return true;
+  if (/user closed|user rejected|cancelled in wallet|transaction cancelled|request rejected/i.test(msg)) {
+    return true;
+  }
+  if (/\b(cancelled|canceled|rejected)\b/i.test(msg)) {
+    return true;
+  }
+  // If message contains cancel or reject without being a contract phrase
+  if (/\b(cancel|reject)\b/i.test(msg) && !/can cancel/i.test(msg)) {
     return true;
   }
   return false;
 }
 
-export function isTryingToLoginError(error: any): boolean {
+/**
+ * Checks if the RPC node explicitly returned an error (CPU, expired, authorization, etc.).
+ * This is a deterministic failure from the node.
+ */
+export function isNodeRejection(error: any): boolean {
   if (!error) return false;
-  const msg = typeof error === "string" ? error : error.message || JSON.stringify(error);
-  return /trying to login/i.test(msg);
-}
-
-export function isContractAssertionError(error: any): boolean {
-  if (!error) return false;
-  if (isCancelError(error) || isTryingToLoginError(error)) return false;
-  const msg = typeof error === "string" ? error : error.message || error.reason || JSON.stringify(error);
-  if (/assertion failure|eosio_assert/i.test(msg)) return true;
-  if (error.json?.error?.name?.includes("eosio_assert")) return true;
-  if (error.json?.error?.code === 3050003 || error.json?.error?.code === 3050004) return true;
-  return false;
+  const jsonError = error.json?.error || error.error?.json?.error;
+  return !!jsonError;
 }
 
 /**
@@ -92,14 +140,7 @@ export async function runTransaction(
       return { success: false, status: "ignored" };
     }
 
-    // 2. Cancellation: E_CANCEL, E_WALLET_TYPE, 'Closed', cancel / reject
-    if (isCancelError(txError)) {
-      const message = "You cancelled in your wallet. Nothing was sent.";
-      options?.onStatusChange?.("cancelled", { message });
-      return { success: false, status: "cancelled", message };
-    }
-
-    // 3. Contract assertion failure: formatContractError
+    // 2. Contract assertion failure (checked BEFORE cancel!)
     if (isContractAssertionError(txError)) {
       const formatted = formatContractError(txError);
       options?.onStatusChange?.("contract_error", { message: formatted.message });
@@ -111,7 +152,26 @@ export async function runTransaction(
       };
     }
 
-    // 4. Everything else (network drop, timeout, broadcast fail, unknown):
+    // 3. Cancellation in wallet
+    if (isCancelError(txError)) {
+      const message = "You cancelled in your wallet. Nothing was sent.";
+      options?.onStatusChange?.("cancelled", { message });
+      return { success: false, status: "cancelled", message };
+    }
+
+    // 4. Node definitive rejection (CPU, expired, missing authority, etc.)
+    if (isNodeRejection(txError)) {
+      const formatted = formatContractError(txError);
+      options?.onStatusChange?.("contract_error", { message: formatted.message });
+      return {
+        success: false,
+        status: "contract_error",
+        message: formatted.message,
+        rawDetails: formatted.rawDetails,
+      };
+    }
+
+    // 5. Everything else (NO response from the node, timeout, network drop, connection reset):
     // Enter "Checking the network…" state and poll pollCondition for up to 15s
     options?.onStatusChange?.("checking", { message: "Checking the network…" });
 
@@ -122,6 +182,7 @@ export async function runTransaction(
         try {
           const confirmed = await pollCondition();
           if (confirmed) {
+            clearRpcCache();
             options?.onStatusChange?.("success");
             return { success: true, recovered: true, data: confirmed };
           }
@@ -166,6 +227,7 @@ export async function runTransaction(
     }
 
     if (isConfirmed) {
+      clearRpcCache();
       options?.onStatusChange?.("success", { txId });
       return { success: true, txId, data: confirmedData };
     } else {
@@ -182,6 +244,7 @@ export async function runTransaction(
   }
 
   // If no pollCondition was provided, report immediate success
+  clearRpcCache();
   options?.onStatusChange?.("success", { txId });
   return { success: true, txId, data: txResult };
 }

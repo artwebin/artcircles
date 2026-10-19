@@ -9,6 +9,7 @@ import {
   ExternalLink,
   AlertTriangle
 } from "lucide-react";
+import { EXPLORER_URL } from "@/lib/config";
 
 export const metadata: Metadata = {
   title: "Safety & Trust Model - XPR Circles",
@@ -114,7 +115,7 @@ export default function SafetyPage() {
                 On testnet the contract is already controlled by a 3-of-5 multisig held by test accounts. Before mainnet, the same setup moves to five independent XPR block producers, and any change to the contract needs three of them to sign. You can check this yourself in the account’s permissions on the explorer.
               </p>
               <p className="text-caption" style={{ color: "var(--text-secondary)" }}>
-                The contract, the automated keeper, and the Telegram bot are open source on GitHub with 48 automated test suites passing.
+                The contract, the automated keeper, and the Telegram bot are open source on GitHub with 58 automated tests passing.
               </p>
             </div>
           </section>
@@ -175,7 +176,7 @@ export default function SafetyPage() {
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "16px 20px", borderBottom: "1px solid var(--border)" }}>
                 <div>
                   <span style={{ fontWeight: 600, display: "block" }}>Smart Contract Code</span>
-                  <span className="text-caption">Open source, 48 automated test suites passing</span>
+                  <span className="text-caption">Open source, 58 automated tests passing</span>
                 </div>
                 <a href="https://github.com/artwebin/artcircles" target="_blank" rel="noreferrer" className="btn-ghost" style={{ display: "inline-flex", alignItems: "center", gap: "4px" }}>
                   github.com/artwebin/artcircles <ExternalLink size={14} />
@@ -187,7 +188,7 @@ export default function SafetyPage() {
                   <span style={{ fontWeight: 600, display: "block" }}>Contract on XPR Testnet</span>
                   <span className="text-caption">Account name: artcircles</span>
                 </div>
-                <a href="https://testnet.explorer.xprnetwork.org/contract/artcircles" target="_blank" rel="noreferrer" className="btn-ghost" style={{ display: "inline-flex", alignItems: "center", gap: "4px" }}>
+                <a href={`${EXPLORER_URL}/contract/artcircles`} target="_blank" rel="noreferrer" className="btn-ghost" style={{ display: "inline-flex", alignItems: "center", gap: "4px" }}>
                   Explorer <ExternalLink size={14} />
                 </a>
               </div>

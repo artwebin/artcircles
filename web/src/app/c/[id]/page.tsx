@@ -1,5 +1,6 @@
 import { Metadata } from "next";
 import { getCircle, getMembers, getChainTime } from "@/lib/rpc";
+import { EXPLORER_URL } from "@/lib/config";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { CircleActions } from "@/components/CircleActions";
@@ -349,7 +350,7 @@ export default async function CirclePage({ params }: { params: Promise<{ id: str
                 
                 <div style={{ marginTop: "24px", paddingTop: "24px", borderTop: "1px solid var(--border)", display: "flex", flexDirection: "column", gap: "16px" }}>
                   <Link href="/safety" style={{ color: "var(--brand)", textDecoration: "underline", textUnderlineOffset: "4px", fontWeight: 500, fontSize: "14px" }}>What happens if someone doesn't pay</Link>
-                  <a href={`https://testnet.explorer.xprnetwork.org/contract/artcircles`} target="_blank" rel="noreferrer" style={{ color: "var(--brand)", textDecoration: "underline", textUnderlineOffset: "4px", fontWeight: 500, fontSize: "14px" }}>View this circle on the explorer</a>
+                  <a href={`${EXPLORER_URL}/contract/artcircles`} target="_blank" rel="noreferrer" style={{ color: "var(--brand)", textDecoration: "underline", textUnderlineOffset: "4px", fontWeight: 500, fontSize: "14px" }}>View this circle on the explorer</a>
                 </div>
               </div>
             </div>

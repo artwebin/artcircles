@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useProton } from "./ProtonProvider";
 import { formatContractError } from "@/lib/errors";
-import { getMembers, getCircle } from "@/lib/rpc";
+import { getMembers, getCircle, clearRpcCache } from "@/lib/rpc";
 import { ConfirmationSheet } from "./ConfirmationSheet";
 
 interface CircleActionsProps {
@@ -102,7 +102,7 @@ export function CircleActions({
       ],
       successSentence: "You joined the circle",
       pollCondition: async () => {
-        const updated = await getMembers(circleId);
+        const updated = await getMembers(circleId, { fresh: true });
         return updated.some((m: any) => m.account === account);
       },
     });
@@ -133,7 +133,7 @@ export function CircleActions({
       ],
       successSentence: `Round ${currentRound} payment confirmed`,
       pollCondition: async () => {
-        const updated = await getMembers(circleId);
+        const updated = await getMembers(circleId, { fresh: true });
         const myMem = updated.find((m: any) => m.account === account);
         return myMem ? myMem.paidRound >= currentRound : false;
       },
@@ -158,7 +158,7 @@ export function CircleActions({
       ],
       successSentence: "You left the circle",
       pollCondition: async () => {
-        const updated = await getMembers(circleId);
+        const updated = await getMembers(circleId, { fresh: true });
         return !updated.some((m: any) => m.account === account);
       },
     });
@@ -180,7 +180,7 @@ export function CircleActions({
       ],
       successSentence: "Payout order approved",
       pollCondition: async () => {
-        const updated = await getMembers(circleId);
+        const updated = await getMembers(circleId, { fresh: true });
         const myMem = updated.find((m: any) => m.account === account);
         return myMem ? !!myMem.approved : false;
       },
@@ -203,7 +203,7 @@ export function CircleActions({
       ],
       successSentence: "Circle started",
       pollCondition: async () => {
-        const c = await getCircle(circleId);
+        const c = await getCircle(circleId, { fresh: true });
         return c ? c.state === 1 : false;
       },
     });
@@ -225,7 +225,7 @@ export function CircleActions({
       ],
       successSentence: "Circle cancelled and deposits refunded",
       pollCondition: async () => {
-        const c = await getCircle(circleId);
+        const c = await getCircle(circleId, { fresh: true });
         return c ? c.state === 3 : false;
       },
     });
@@ -251,8 +251,9 @@ export function CircleActions({
       ],
       successSentence: "Payout order saved",
       pollCondition: async () => {
-        const mems = await getMembers(circleId);
-        return mems.some((m: any) => m.slot !== 0);
+        const mems = await getMembers(circleId, { fresh: true });
+        const slotMap = new Map(mems.map((m: any) => [m.account, m.slot]));
+        return customOrder.every((acc, idx) => slotMap.get(acc) === idx + 1);
       },
     });
   };
@@ -457,6 +458,7 @@ export function CircleActions({
           account={account}
           onClose={() => setSheetConfig(null)}
           onSuccess={() => {
+            clearRpcCache();
             setSheetConfig(null);
             router.refresh();
           }}

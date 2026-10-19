@@ -4,9 +4,9 @@ import React, { useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { useProton } from "@/components/ProtonProvider";
-import { getMemberships } from "@/lib/rpc";
+import { getMemberships, clearRpcCache } from "@/lib/rpc";
 import { formatContractError } from "@/lib/errors";
-import { runTransaction } from "@/lib/transact";
+import { runTransaction, isBrowserWebAuth } from "@/lib/transact";
 import toast from "react-hot-toast";
 import { 
   ChevronLeft, 
@@ -24,6 +24,8 @@ import { Footer } from "@/components/layout/Footer";
 export default function NewCirclePage() {
   const router = useRouter();
   const { session, login } = useProton();
+  const isBrowser = isBrowserWebAuth(session);
+  const attemptRef = React.useRef(0);
 
   // Wizard step: 1, 2, or 3
   const [step, setStep] = useState<1 | 2 | 3>(1);
@@ -137,6 +139,7 @@ export default function NewCirclePage() {
       await login();
       return;
     }
+    const currentAttempt = ++attemptRef.current;
     setLoading(true);
     setCheckingNetwork(false);
     setError(null);
@@ -145,13 +148,15 @@ export default function NewCirclePage() {
 
     if (popupTimerRef.current) clearTimeout(popupTimerRef.current);
     popupTimerRef.current = setTimeout(() => {
-      setShowPopupNotice(true);
+      if (currentAttempt === attemptRef.current) {
+        setShowPopupNotice(true);
+      }
     }, 4000);
 
     try {
       let prevIds = new Set<string>();
       try {
-        const existing = await getMemberships(session.auth.actor);
+        const existing = await getMemberships(session.auth.actor, { fresh: true });
         prevIds = new Set(existing.map((m: any) => String(m.circle)));
       } catch (e) {
         console.warn("Could not query previous memberships before creating", e);
@@ -178,7 +183,7 @@ export default function NewCirclePage() {
 
       const pollCondition = async () => {
         try {
-          const fresh = await getMemberships(session.auth.actor);
+          const fresh = await getMemberships(session.auth.actor, { fresh: true });
           const found = fresh.find((m: any) => !prevIds.has(String(m.circle)));
           if (found) {
             return String(found.circle);
@@ -191,6 +196,7 @@ export default function NewCirclePage() {
 
       const result = await runTransaction(session, actions, pollCondition, {
         onStatusChange: (status) => {
+          if (currentAttempt !== attemptRef.current) return;
           if (status === "checking") {
             if (popupTimerRef.current) clearTimeout(popupTimerRef.current);
             setShowPopupNotice(false);
@@ -199,11 +205,16 @@ export default function NewCirclePage() {
         },
       });
 
+      if (currentAttempt !== attemptRef.current) {
+        return;
+      }
+
       if (popupTimerRef.current) clearTimeout(popupTimerRef.current);
       setShowPopupNotice(false);
       setCheckingNetwork(false);
 
       if (result.success) {
+        clearRpcCache();
         toast.success("Circle created successfully!");
         const newCircleId = result.data;
         if (newCircleId) {
@@ -222,12 +233,15 @@ export default function NewCirclePage() {
         setRetryCooldown(15);
       }
     } catch (err: any) {
+      if (currentAttempt !== attemptRef.current) return;
       console.error(err);
       const formatted = formatContractError(err);
       setError(formatted.message);
     } finally {
-      setLoading(false);
-      if (popupTimerRef.current) clearTimeout(popupTimerRef.current);
+      if (currentAttempt === attemptRef.current) {
+        setLoading(false);
+        if (popupTimerRef.current) clearTimeout(popupTimerRef.current);
+      }
     }
   };
 
@@ -643,22 +657,39 @@ export default function NewCirclePage() {
                   </p>
                 </div>
 
-                {/* Pop-up blocked warning */}
+                {/* Pop-up blocked warning or wallet app notice */}
                 {loading && showPopupNotice && (
-                  <div
-                    style={{
-                      background: "var(--warning-bg)",
-                      border: "1px solid #F6D799",
-                      color: "var(--warning-text)",
-                      padding: "12px 16px",
-                      borderRadius: "var(--radius-md)",
-                      marginBottom: "var(--space-20)",
-                      fontSize: "14px",
-                      lineHeight: 1.4,
-                    }}
-                  >
-                    No wallet window? Allow pop-ups for this site, then tap again.
-                  </div>
+                  isBrowser ? (
+                    <div
+                      style={{
+                        background: "var(--warning-bg)",
+                        border: "1px solid #F6D799",
+                        color: "var(--warning-text)",
+                        padding: "12px 16px",
+                        borderRadius: "var(--radius-md)",
+                        marginBottom: "var(--space-20)",
+                        fontSize: "14px",
+                        lineHeight: 1.4,
+                      }}
+                    >
+                      No wallet window? Allow pop-ups for this site, then tap again.
+                    </div>
+                  ) : (
+                    <div
+                      style={{
+                        background: "var(--surface-muted)",
+                        border: "1px solid var(--border)",
+                        color: "var(--text-secondary)",
+                        padding: "12px 16px",
+                        borderRadius: "var(--radius-md)",
+                        marginBottom: "var(--space-20)",
+                        fontSize: "14px",
+                        lineHeight: 1.4,
+                      }}
+                    >
+                      Check your wallet app to approve.
+                    </div>
+                  )
                 )}
 
                 {/* Unconfirmed warning */}
@@ -723,11 +754,11 @@ export default function NewCirclePage() {
                     type="button"
                     className="btn-primary btn-large"
                     onClick={handleCreateCircle}
-                    disabled={(loading && !showPopupNotice) || retryCooldown > 0}
+                    disabled={(loading && (!isBrowser || !showPopupNotice)) || retryCooldown > 0}
                     style={{ flex: 1 }}
                   >
                     {loading
-                      ? showPopupNotice
+                      ? isBrowser && showPopupNotice
                         ? "Tap to try again"
                         : checkingNetwork
                         ? "Checking the network…"

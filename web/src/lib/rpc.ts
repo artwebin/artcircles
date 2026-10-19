@@ -14,29 +14,7 @@ const DEFAULT_MAINNET_ENDPOINTS = [
 ];
 
 function getRpcEndpoints(): string[] {
-  const isMainnet =
-    typeof process !== "undefined" &&
-    (process.env.NEXT_PUBLIC_CHAIN_NETWORK === "mainnet" || process.env.NEXT_PUBLIC_NETWORK === "mainnet");
-
-  if (typeof process !== "undefined") {
-    if (isMainnet && process.env.NEXT_PUBLIC_RPC_ENDPOINTS_MAINNET) {
-      return process.env.NEXT_PUBLIC_RPC_ENDPOINTS_MAINNET.split(",")
-        .map((s) => s.trim())
-        .filter(Boolean);
-    }
-    if (!isMainnet && process.env.NEXT_PUBLIC_RPC_ENDPOINTS_TESTNET) {
-      return process.env.NEXT_PUBLIC_RPC_ENDPOINTS_TESTNET.split(",")
-        .map((s) => s.trim())
-        .filter(Boolean);
-    }
-    if (process.env.NEXT_PUBLIC_RPC_ENDPOINTS) {
-      return process.env.NEXT_PUBLIC_RPC_ENDPOINTS.split(",")
-        .map((s) => s.trim())
-        .filter(Boolean);
-    }
-  }
-
-  return isMainnet ? DEFAULT_MAINNET_ENDPOINTS : DEFAULT_TESTNET_ENDPOINTS;
+  return process.env.NEXT_PUBLIC_CHAIN === "mainnet" ? DEFAULT_MAINNET_ENDPOINTS : DEFAULT_TESTNET_ENDPOINTS;
 }
 
 export const RPC_ENDPOINTS = getRpcEndpoints();
@@ -47,11 +25,17 @@ export function clearRpcCache() {
   rpcCache.clear();
 }
 
+export interface QueryOptions {
+  fresh?: boolean;
+}
+
 async function fetchWithFailover(path: string, body: any, ttlMs = 10000) {
   const cacheKey = `${path}:${JSON.stringify(body)}`;
-  const cached = rpcCache.get(cacheKey);
-  if (cached && Date.now() < cached.expiry) {
-    return cached.data;
+  if (ttlMs > 0) {
+    const cached = rpcCache.get(cacheKey);
+    if (cached && Date.now() < cached.expiry) {
+      return cached.data;
+    }
   }
 
   const headers: Record<string, string> = {
@@ -85,7 +69,9 @@ async function fetchWithFailover(path: string, body: any, ttlMs = 10000) {
         throw new Error(`Expected JSON but got ${contentType}`);
       }
       const data = await response.json();
-      rpcCache.set(cacheKey, { data, expiry: Date.now() + ttlMs });
+      if (ttlMs > 0) {
+        rpcCache.set(cacheKey, { data, expiry: Date.now() + ttlMs });
+      }
       return data;
     } catch (e) {
       console.warn(`RPC endpoint ${endpoint} failed`, e);
@@ -111,19 +97,27 @@ export interface GetAllRowsParams {
 /**
  * Paginates through a contract table until more: false using next_key as lower_bound.
  */
-export async function getAllRows<T = any>(params: GetAllRowsParams, batchLimit = 100): Promise<T[]> {
+export async function getAllRows<T = any>(
+  params: GetAllRowsParams,
+  batchLimit = 100,
+  ttlMs = 10000
+): Promise<T[]> {
   const allRows: T[] = [];
   let lowerBound = params.lower_bound ?? 0;
   let hasMore = true;
 
   while (hasMore) {
-    const data = await fetchWithFailover("/v1/chain/get_table_rows", {
-      ...params,
-      scope: String(params.scope),
-      limit: batchLimit,
-      lower_bound: lowerBound,
-      json: true,
-    });
+    const data = await fetchWithFailover(
+      "/v1/chain/get_table_rows",
+      {
+        ...params,
+        scope: String(params.scope),
+        limit: batchLimit,
+        lower_bound: lowerBound,
+        json: true,
+      },
+      ttlMs
+    );
 
     const rows: T[] = data?.rows || [];
     if (rows.length === 0) break;
@@ -142,39 +136,54 @@ export async function getAllRows<T = any>(params: GetAllRowsParams, batchLimit =
   return allRows;
 }
 
-export async function getCircle(id: string) {
-  const data = await fetchWithFailover("/v1/chain/get_table_rows", {
-    code: "artcircles",
-    scope: "artcircles",
-    table: "circles",
-    lower_bound: id,
-    upper_bound: id,
-    limit: 1,
-    json: true,
-  });
+export async function getCircle(id: string, options?: QueryOptions) {
+  const ttlMs = options?.fresh ? 0 : 10000;
+  const data = await fetchWithFailover(
+    "/v1/chain/get_table_rows",
+    {
+      code: "artcircles",
+      scope: "artcircles",
+      table: "circles",
+      lower_bound: id,
+      upper_bound: id,
+      limit: 1,
+      json: true,
+    },
+    ttlMs
+  );
   return data.rows[0] || null;
 }
 
-export async function getMembers(id: string) {
-  return getAllRows({
-    code: "artcircles",
-    scope: id,
-    table: "members",
-  });
+export async function getMembers(id: string, options?: QueryOptions) {
+  const ttlMs = options?.fresh ? 0 : 10000;
+  return getAllRows(
+    {
+      code: "artcircles",
+      scope: id,
+      table: "members",
+    },
+    100,
+    ttlMs
+  );
 }
 
 export interface MembershipRow {
   circle: number;
-  organizer: number;
-  member: number;
+  organizer: boolean;
+  member: boolean;
 }
 
-export async function getMemberships(account: string): Promise<MembershipRow[]> {
-  return getAllRows<MembershipRow>({
-    code: "artcircles",
-    scope: account,
-    table: "memberships",
-  });
+export async function getMemberships(account: string, options?: QueryOptions): Promise<MembershipRow[]> {
+  const ttlMs = options?.fresh ? 0 : 10000;
+  return getAllRows<MembershipRow>(
+    {
+      code: "artcircles",
+      scope: account,
+      table: "memberships",
+    },
+    100,
+    ttlMs
+  );
 }
 
 export async function getChainTime() {
@@ -187,8 +196,8 @@ export async function getChainTime() {
  * Reads circles for account via the memberships table (scope = account),
  * and fetches each circle and member list in parallel.
  */
-export async function getMyCircles(account: string) {
-  const memberships = await getMemberships(account);
+export async function getMyCircles(account: string, options?: QueryOptions) {
+  const memberships = await getMemberships(account, options);
   if (memberships.length === 0) {
     return [];
   }
@@ -198,21 +207,21 @@ export async function getMyCircles(account: string) {
       const circleId = String(m.circle);
       try {
         const [circle, members] = await Promise.all([
-          getCircle(circleId),
-          getMembers(circleId),
+          getCircle(circleId, options),
+          getMembers(circleId, options),
         ]);
 
         if (!circle) return null;
 
         const myMember = members.find((mem: any) => mem.account === account);
-        const isOrganizer = circle.organizer === account;
+        const isOrganizer = Boolean(m.organizer) || circle.organizer === account;
 
         return {
           ...circle,
           membersList: members,
           myMember,
           isOrganizer,
-          isMember: !!myMember,
+          isMember: Boolean(m.member) || !!myMember,
         };
       } catch (e) {
         console.warn(`Failed to fetch circle #${circleId} for account ${account}`, e);

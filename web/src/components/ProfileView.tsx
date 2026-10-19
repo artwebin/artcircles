@@ -4,6 +4,7 @@ import React, { useState, useEffect } from "react";
 import Link from "next/link";
 import { useProton } from "@/components/ProtonProvider";
 import { ReputationCard } from "@/components/ReputationCard";
+import { EXPLORER_URL } from "@/lib/config";
 import { 
   ReputationData, 
   getAvatarColor,
@@ -565,7 +566,7 @@ export function ProfileView({
                   </a>
                 )}
                 <a
-                  href={`https://testnet.explorer.xprnetwork.org/account/${account}`}
+                  href={`${EXPLORER_URL}/account/${account}`}
                   target="_blank"
                   rel="noopener noreferrer"
                   className="account-link-item"

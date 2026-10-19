@@ -2,7 +2,7 @@ import Link from "next/link";
 import { Footer } from "@/components/layout/Footer";
 import { Check } from "lucide-react";
 import CircleRing, { HERO_EXAMPLE } from "@/components/CircleRing";
-import { PROOF_CIRCLE_ID } from "@/lib/config";
+import { PROOF_CIRCLE_ID, EXPLORER_URL, CHAIN } from "@/lib/config";
 
 export default function LandingPage() {
   return (
@@ -283,7 +283,7 @@ export default function LandingPage() {
                   <li><a href="https://github.com/artwebin/artcircles" style={{ color: "var(--on-deep-link)", textDecoration: "underline", textUnderlineOffset: "4px" }}>github.com/artwebin/artcircles</a></li>
                   <li><a href="https://x.com/XPRCircles" style={{ color: "var(--on-deep-link)", textDecoration: "underline", textUnderlineOffset: "4px" }}>x.com/XPRCircles</a></li>
                   <li><a href="https://t.me/artcircles_bot" style={{ color: "var(--on-deep-link)", textDecoration: "underline", textUnderlineOffset: "4px" }}>t.me/artcircles_bot</a></li>
-                  <li><a href="https://testnet.explorer.xprnetwork.org/contract/artcircles" target="_blank" rel="noreferrer" style={{ color: "var(--on-deep-link)", textDecoration: "underline", textUnderlineOffset: "4px" }}>Contract on XPR Testnet</a></li>
+                  <li><a href={`${EXPLORER_URL}/contract/artcircles`} target="_blank" rel="noreferrer" style={{ color: "var(--on-deep-link)", textDecoration: "underline", textUnderlineOffset: "4px" }}>Contract on XPR {CHAIN === "mainnet" ? "Mainnet" : "Testnet"}</a></li>
                 </ul>
                 
                 <p className="text-label" style={{ color: "var(--on-deep)", fontWeight: 700 }}>XPR Circles has no token. Any XPR Circles token or airdrop is a scam.</p>

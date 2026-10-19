@@ -2,9 +2,10 @@
 
 import React, { useState, useEffect, useRef } from "react";
 import { useProton } from "./ProtonProvider";
-import { getXusdcBalance } from "@/lib/rpc";
+import { getXusdcBalance, clearRpcCache } from "@/lib/rpc";
 import { formatContractError } from "@/lib/errors";
-import { runTransaction } from "@/lib/transact";
+import { runTransaction, isBrowserWebAuth } from "@/lib/transact";
+import { EXPLORER_URL } from "@/lib/config";
 import { ExternalLink, ShieldCheck, AlertCircle, HelpCircle } from "lucide-react";
 
 export interface ConfirmationSheetProps {
@@ -50,7 +51,9 @@ export function ConfirmationSheet({
   const [error, setError] = useState<{ message: string; rawDetails?: string } | null>(null);
   const [txId, setTxId] = useState<string | null>(null);
 
+  const attemptRef = useRef(0);
   const popupTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const isBrowser = isBrowserWebAuth(session);
 
   // Load balance when opened
   useEffect(() => {
@@ -99,6 +102,7 @@ export function ConfirmationSheet({
 
   const handleContinueToWallet = async () => {
     if (!session) return;
+    const currentAttempt = ++attemptRef.current;
     setStatus("wallet");
     setError(null);
     setCancelledInWallet(false);
@@ -106,12 +110,15 @@ export function ConfirmationSheet({
 
     if (popupTimerRef.current) clearTimeout(popupTimerRef.current);
     popupTimerRef.current = setTimeout(() => {
-      setShowPopupNotice(true);
+      if (currentAttempt === attemptRef.current) {
+        setShowPopupNotice(true);
+      }
     }, 4000);
 
     const result = await runTransaction(session, actions, pollCondition, {
       circleId,
       onStatusChange: (newStatus, details) => {
+        if (currentAttempt !== attemptRef.current) return;
         if (newStatus === "checking") {
           if (popupTimerRef.current) clearTimeout(popupTimerRef.current);
           setShowPopupNotice(false);
@@ -125,10 +132,15 @@ export function ConfirmationSheet({
       },
     });
 
+    if (currentAttempt !== attemptRef.current) {
+      return;
+    }
+
     if (popupTimerRef.current) clearTimeout(popupTimerRef.current);
     setShowPopupNotice(false);
 
     if (result.success) {
+      clearRpcCache();
       if (result.txId) setTxId(result.txId);
       setStatus("success");
       setTimeout(() => {
@@ -309,22 +321,39 @@ export function ConfirmationSheet({
               </p>
             </div>
 
-            {/* Pop-up blocked warning */}
+            {/* Pop-up blocked warning or wallet app notice */}
             {status === "wallet" && showPopupNotice && (
-              <div
-                style={{
-                  background: "var(--warning-bg)",
-                  border: "1px solid #F6D799",
-                  color: "var(--warning-text)",
-                  padding: "12px 16px",
-                  borderRadius: "var(--radius-md)",
-                  marginTop: "var(--space-16)",
-                  fontSize: "14px",
-                  lineHeight: 1.4,
-                }}
-              >
-                No wallet window? Allow pop-ups for this site, then tap again.
-              </div>
+              isBrowser ? (
+                <div
+                  style={{
+                    background: "var(--warning-bg)",
+                    border: "1px solid #F6D799",
+                    color: "var(--warning-text)",
+                    padding: "12px 16px",
+                    borderRadius: "var(--radius-md)",
+                    marginTop: "var(--space-16)",
+                    fontSize: "14px",
+                    lineHeight: 1.4,
+                  }}
+                >
+                  No wallet window? Allow pop-ups for this site, then tap again.
+                </div>
+              ) : (
+                <div
+                  style={{
+                    background: "var(--surface-muted)",
+                    border: "1px solid var(--border)",
+                    color: "var(--text-secondary)",
+                    padding: "12px 16px",
+                    borderRadius: "var(--radius-md)",
+                    marginTop: "var(--space-16)",
+                    fontSize: "14px",
+                    lineHeight: 1.4,
+                  }}
+                >
+                  Check your wallet app to approve.
+                </div>
+              )
             )}
 
             {/* Actions */}
@@ -342,11 +371,11 @@ export function ConfirmationSheet({
                 type="button"
                 className="btn-primary btn-large"
                 onClick={handleContinueToWallet}
-                disabled={hasInsufficientBalance || loadingBalance || (status === "wallet" && !showPopupNotice)}
+                disabled={hasInsufficientBalance || loadingBalance || (status === "wallet" && (!isBrowser || !showPopupNotice))}
                 style={{ flex: 1 }}
               >
                 {status === "wallet"
-                  ? showPopupNotice
+                  ? isBrowser && showPopupNotice
                     ? "Tap to try again"
                     : "Waiting for wallet..."
                   : "Continue to wallet"}
@@ -400,7 +429,7 @@ export function ConfirmationSheet({
             </p>
             {txId && (
               <a
-                href={`https://testnet.explorer.xprnetwork.org/transaction/${txId}`}
+                href={`${EXPLORER_URL}/transaction/${txId}`}
                 target="_blank"
                 rel="noreferrer"
                 style={{
@@ -486,7 +515,7 @@ export function ConfirmationSheet({
             {txId && (
               <div style={{ marginBottom: "var(--space-20)" }}>
                 <a
-                  href={`https://testnet.explorer.xprnetwork.org/transaction/${txId}`}
+                  href={`${EXPLORER_URL}/transaction/${txId}`}
                   target="_blank"
                   rel="noreferrer"
                   style={{
