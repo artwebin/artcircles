@@ -14,7 +14,7 @@ export class AuthError extends Error {
 }
 
 function getSecret(): Uint8Array {
-    const raw = process.env.SESSION_SECRET;
+    const raw = process.env.SESSION_SECRET || (process.env.NODE_ENV !== 'production' ? 'dev-session-secret-must-be-at-least-32-chars-long-xpr-circles' : undefined);
     if (!raw || raw.length < 32) {
         throw new Error('SESSION_SECRET must be set and at least 32 characters long');
     }
