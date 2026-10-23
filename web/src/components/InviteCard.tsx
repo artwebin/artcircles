@@ -89,10 +89,19 @@ export function InviteCard({ circleId, circleName, seatsRemaining }: InviteCardP
           type="button"
           className="btn-secondary btn-small"
           onClick={handleCopy}
-          style={{ gap: "6px", flexShrink: 0 }}
+          aria-label={copied ? "Copied" : "Copy invite link"}
+          title={copied ? "Copied" : "Copy invite link"}
+          style={{ 
+            width: "36px", 
+            height: "36px", 
+            padding: 0, 
+            display: "inline-flex", 
+            alignItems: "center", 
+            justifyContent: "center", 
+            flexShrink: 0 
+          }}
         >
-          {copied ? <Check size={14} style={{ color: "var(--brand)" }} /> : <Copy size={14} />}
-          {copied ? "Copied" : "Copy"}
+          {copied ? <Check size={16} style={{ color: "var(--brand)" }} /> : <Copy size={16} />}
         </button>
       </div>
 
