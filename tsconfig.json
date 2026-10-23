@@ -10,7 +10,10 @@
     "noImplicitReturns": true,
     "baseUrl": "./",
     "paths": {},
-    "typeRoots": ["node_modules/assemblyscript/std"],
+    "typeRoots": [
+      "node_modules/assemblyscript/std",
+      "node_modules/@types"
+    ],
     "types": ["assembly", "node", "chai", "mocha"],
     "allowJs": true,
     "esModuleInterop": true,
@@ -19,6 +22,7 @@
     "skipLibCheck": true
   },
   "exclude": [
-    "./node_modules/*"
+    "./node_modules/*",
+    "./web/*"
   ]
 }

@@ -340,6 +340,10 @@ export function ProtonProvider({
       );
     } catch (e) {
       console.warn("Signature request was not completed:", e);
+      try {
+        (walletSession as any).link?.transport?.close?.();
+        (walletSession as any).link?.transport?.ui?.close?.();
+      } catch {}
       if (!isCurrent()) return;
       setFlow((prev) =>
         prev
