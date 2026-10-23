@@ -3,6 +3,7 @@
 import React, { createContext, useContext, useState, useEffect } from "react";
 import ProtonWebSDK from "@proton/web-sdk";
 import { RPC_ENDPOINTS } from "@/lib/rpc";
+import { CHAIN } from "@/lib/config";
 
 interface ProtonContextType {
   session: any;
@@ -51,7 +52,8 @@ export function ProtonProvider({
           linkOptions: { 
             endpoints: RPC_ENDPOINTS, 
             chainId: CHAIN_ID,
-            restoreSession: true 
+            restoreSession: true,
+            ...(CHAIN === "testnet" ? { testUrl: "https://webauth.com" } : {}),
           },
           transportOptions: { requestAccount: appIdentifier.requestAccount },
         });
@@ -74,7 +76,8 @@ export function ProtonProvider({
       const res: any = await ProtonWebSDK({
         linkOptions: { 
           endpoints: RPC_ENDPOINTS,
-          chainId: CHAIN_ID
+          chainId: CHAIN_ID,
+          ...(CHAIN === "testnet" ? { testUrl: "https://webauth.com" } : {}),
         },
         transportOptions: { requestAccount: appIdentifier.requestAccount },
       });
