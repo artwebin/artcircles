@@ -542,10 +542,4 @@ export class artcircles extends Contract {
             m = members.next(m);
         }
     }
-
-    // One-time signature check for web login. Never broadcast to chain.
-    @action("verify")
-    verify(account: Name, verify_token: string): void {
-        requireAuth(account);
-    }
 }

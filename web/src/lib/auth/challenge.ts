@@ -20,7 +20,7 @@ import { RPC_ENDPOINTS } from '@/lib/rpc';
  *    Nothing is ever sent to the chain.
  */
 
-export const AUTH_CONTRACT = process.env.AUTH_CONTRACT || (process.env.NEXT_PUBLIC_CHAIN === 'testnet' ? 'artcircles' : 'xsign');
+export const AUTH_CONTRACT = process.env.AUTH_CONTRACT || 'xsign';
 export const AUTH_ACTION = 'verify';
 export const TOKEN_PREFIX = `${process.env.AUTH_DOMAIN || 'circles.artwebin.com'}:`;
 
