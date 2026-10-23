@@ -20,22 +20,43 @@ import {
 import { getAccountInfo } from "@/lib/rpc";
 import { getAvatarColor, getValidAvatarUrl } from "@/lib/reputation";
 
-export function Header() {
-  const { session, login, logout } = useProton();
+export function Header({ initialActor = null }: { initialActor?: string | null }) {
+  const { session, login, logout, initialActor: contextInitialActor } = useProton();
   const pathname = usePathname();
   const [menuOpen, setMenuOpen] = React.useState(false);
   const [avatarUrl, setAvatarUrl] = React.useState<string | null>(null);
   const [avatarFailed, setAvatarFailed] = React.useState(false);
+  const [localActor, setLocalActor] = React.useState<string | null>(null);
   const menuRef = React.useRef<HTMLDivElement>(null);
 
+  // Check localStorage on initial client mount if cookie wasn't present
   React.useEffect(() => {
-    if (!session?.auth?.actor) {
+    if (!initialActor && !contextInitialActor && !session?.auth?.actor) {
+      try {
+        const stored = localStorage.getItem("proton-storage-user-auth");
+        if (stored) {
+          const parsed = JSON.parse(stored);
+          if (parsed?.actor) {
+            setLocalActor(parsed.actor);
+            document.cookie = `xpr_auth=${encodeURIComponent(parsed.actor)}; path=/; max-age=31536000; SameSite=Lax`;
+          }
+        }
+      } catch {}
+    }
+  }, [initialActor, contextInitialActor, session?.auth?.actor]);
+
+  // Determine active actor: live session actor > cookie initialActor > localStorage actor
+  const currentActor = session?.auth?.actor || contextInitialActor || initialActor || localActor;
+  const isLoggedIn = Boolean(currentActor);
+
+  React.useEffect(() => {
+    if (!currentActor) {
       setAvatarUrl(null);
       setAvatarFailed(false);
       return;
     }
     let active = true;
-    getAccountInfo(session.auth.actor)
+    getAccountInfo(currentActor)
       .then((info) => {
         if (active && info?.avatar) {
           setAvatarUrl(getValidAvatarUrl(info.avatar));
@@ -45,7 +66,7 @@ export function Header() {
     return () => {
       active = false;
     };
-  }, [session?.auth?.actor]);
+  }, [currentActor]);
 
   React.useEffect(() => {
     if (!menuOpen) return;
@@ -83,7 +104,7 @@ export function Header() {
       <div className="container" style={{ height: "100%", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
         
         {/* Left: Wordmark */}
-        <Link href={session ? "/circles" : "/"} style={{ display: "flex", alignItems: "center", textDecoration: "none" }}>
+        <Link href={isLoggedIn ? "/circles" : "/"} style={{ display: "flex", alignItems: "center", textDecoration: "none" }}>
           <Image
             src="/images/xprCircle_logo.svg"
             alt="XPR Circles"
@@ -96,7 +117,7 @@ export function Header() {
 
         {/* Right Nav & Actions */}
         <div style={{ display: "flex", alignItems: "center", gap: "24px" }}>
-          {!session ? (
+          {!isLoggedIn ? (
             <>
               {/* Desktop links for visitors */}
               <nav className="desktop-only" style={{ gap: "24px", alignItems: "center" }}>
@@ -169,8 +190,8 @@ export function Header() {
                         width: "30px",
                         height: "30px",
                         borderRadius: "50%",
-                        backgroundColor: session?.auth?.actor ? getAvatarColor(session.auth.actor).bg : "var(--surface-muted)",
-                        color: session?.auth?.actor ? getAvatarColor(session.auth.actor).text : "var(--text)",
+                        backgroundColor: currentActor ? getAvatarColor(currentActor).bg : "var(--surface-muted)",
+                        color: currentActor ? getAvatarColor(currentActor).text : "var(--text)",
                         display: "flex",
                         alignItems: "center",
                         justifyContent: "center",
@@ -181,10 +202,10 @@ export function Header() {
                         flexShrink: 0,
                       }}
                     >
-                      {session?.auth?.actor ? session.auth.actor[0].toLowerCase() : ""}
+                      {currentActor ? currentActor[0].toLowerCase() : ""}
                     </div>
                   )}
-                  <span className="desktop-only text-label" style={{ fontWeight: 600 }}>{session.auth.actor}</span>
+                  <span className="desktop-only text-label" style={{ fontWeight: 600 }}>{currentActor}</span>
                   <ChevronDown size={14} className="desktop-only" style={{ color: "var(--text-secondary)", transition: "transform 150ms", transform: menuOpen ? "rotate(180deg)" : "none" }} />
                 </button>
 
@@ -209,7 +230,7 @@ export function Header() {
                         Signed in as
                       </div>
                       <div style={{ fontSize: "14px", fontWeight: 700, color: "var(--text)", marginTop: "2px" }}>
-                        @{session.auth.actor}
+                        @{currentActor}
                       </div>
                     </div>
 
@@ -219,7 +240,7 @@ export function Header() {
                     <Link href="/new" className="menu-item" onClick={() => setMenuOpen(false)}>
                       <PlusCircle size={16} /> Create a circle
                     </Link>
-                    <Link href={`/a/${session.auth.actor}`} className="menu-item" onClick={() => setMenuOpen(false)}>
+                    <Link href={`/a/${currentActor}`} className="menu-item" onClick={() => setMenuOpen(false)}>
                       <User size={16} /> My profile
                     </Link>
                     <Link href="/reminders" className="menu-item" onClick={() => setMenuOpen(false)}>

@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { cookies } from "next/headers";
 import { Bricolage_Grotesque, Figtree } from "next/font/google";
 import { ProtonProvider } from "@/components/ProtonProvider";
 import { Toaster } from "react-hot-toast";
@@ -36,17 +37,39 @@ export const metadata: Metadata = {
   },
 };
 
-export default function RootLayout({
+export default async function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  const cookieStore = await cookies();
+  const initialActor = cookieStore.get("xpr_auth")?.value || null;
+
   return (
     <html lang="en" className={`${bricolage.variable} ${figtree.variable}`}>
+      <head>
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `
+              (function() {
+                try {
+                  var stored = localStorage.getItem('proton-storage-user-auth');
+                  if (stored && !document.cookie.includes('xpr_auth=')) {
+                    var parsed = JSON.parse(stored);
+                    if (parsed && parsed.actor) {
+                      document.cookie = 'xpr_auth=' + encodeURIComponent(parsed.actor) + '; path=/; max-age=31536000; SameSite=Lax';
+                    }
+                  }
+                } catch(e) {}
+              })();
+            `,
+          }}
+        />
+      </head>
       <body suppressHydrationWarning>
-        <ProtonProvider>
+        <ProtonProvider initialActor={initialActor}>
           <TestnetBanner />
-          <Header />
+          <Header initialActor={initialActor} />
           <main style={{ minHeight: "100vh" }}>
             {children}
           </main>
