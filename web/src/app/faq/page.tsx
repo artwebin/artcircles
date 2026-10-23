@@ -100,6 +100,14 @@ const FAQS: FAQItem[] = [
         You can connect with the official Telegram bot (<a href="https://t.me/artcircles_bot" target="_blank" rel="noreferrer" style={{ color: "var(--brand)", textDecoration: "underline" }}>@artcircles_bot</a>). It will automatically notify you 24 hours before each deadline and when it is your turn to receive the pot.
       </p>
     )
+  },
+  {
+    q: "Why does logging in ask for a signature?",
+    a: (
+      <p>
+        The signature proves that you control the account. It is a one-time message that is never sent to the chain and costs nothing.
+      </p>
+    )
   }
 ];
 

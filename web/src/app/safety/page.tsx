@@ -66,6 +66,20 @@ export default function SafetyPage() {
                 </div>
                 <div>
                   <h3 className="text-h3" style={{ fontSize: "17px", marginBottom: "4px" }}>
+                    Logging in signs a one-time check
+                  </h3>
+                  <p className="text-body" style={{ color: "var(--text-secondary)", fontSize: "15px" }}>
+                    When you log in, your wallet asks you to sign <code style={{ background: "var(--surface-muted)", padding: "2px 6px", borderRadius: "4px" }}>artcircles · verify</code> with circles.artwebin.com and a random code. This proves the account is yours. It is never sent to the chain, moves no funds and changes no permissions. If a login ever asks you to sign a transfer or a permission change, it is not XPR Circles.
+                  </p>
+                </div>
+              </div>
+
+              <div className="card" style={{ display: "flex", gap: "16px", alignItems: "flex-start" }}>
+                <div style={{ width: "36px", height: "36px", borderRadius: "50%", background: "var(--brand-subtle)", color: "var(--brand)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                  <ShieldCheck size={18} />
+                </div>
+                <div>
+                  <h3 className="text-h3" style={{ fontSize: "17px", marginBottom: "4px" }}>
                     We never hold your private keys
                   </h3>
                   <p className="text-body" style={{ color: "var(--text-secondary)", fontSize: "15px" }}>

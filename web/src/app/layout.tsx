@@ -1,10 +1,10 @@
 import type { Metadata } from "next";
-import { cookies } from "next/headers";
 import { Bricolage_Grotesque, Figtree } from "next/font/google";
 import { ProtonProvider } from "@/components/ProtonProvider";
 import { Toaster } from "react-hot-toast";
 import { TestnetBanner } from "@/components/layout/TestnetBanner";
 import { Header } from "@/components/layout/Header";
+import { getSessionActor } from "@/lib/auth/session";
 import "./globals.css";
 
 const bricolage = Bricolage_Grotesque({
@@ -42,34 +42,14 @@ export default async function RootLayout({
 }: Readonly<{
   children: React.ReactNode;
 }>) {
-  const cookieStore = await cookies();
-  const initialActor = cookieStore.get("xpr_auth")?.value || null;
+  const initialActor = await getSessionActor();
 
   return (
     <html lang="en" className={`${bricolage.variable} ${figtree.variable}`}>
-      <head>
-        <script
-          dangerouslySetInnerHTML={{
-            __html: `
-              (function() {
-                try {
-                  var stored = localStorage.getItem('proton-storage-user-auth');
-                  if (stored && !document.cookie.includes('xpr_auth=')) {
-                    var parsed = JSON.parse(stored);
-                    if (parsed && parsed.actor) {
-                      document.cookie = 'xpr_auth=' + encodeURIComponent(parsed.actor) + '; path=/; max-age=31536000; SameSite=Lax';
-                    }
-                  }
-                } catch(e) {}
-              })();
-            `,
-          }}
-        />
-      </head>
       <body suppressHydrationWarning>
         <ProtonProvider initialActor={initialActor}>
           <TestnetBanner />
-          <Header initialActor={initialActor} />
+          <Header />
           <main style={{ minHeight: "100vh" }}>
             {children}
           </main>

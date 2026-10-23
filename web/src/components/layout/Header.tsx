@@ -19,43 +19,24 @@ import {
 } from "lucide-react";
 import { getAccountInfo } from "@/lib/rpc";
 import { getAvatarColor, getValidAvatarUrl } from "@/lib/reputation";
+import { preloadWallet } from "@/components/ProtonProvider";
 
-export function Header({ initialActor = null }: { initialActor?: string | null }) {
-  const { session, login, logout, initialActor: contextInitialActor } = useProton();
+export function Header() {
+  const { actor, isConnecting, login, logout } = useProton();
   const pathname = usePathname();
   const [menuOpen, setMenuOpen] = React.useState(false);
   const [avatarUrl, setAvatarUrl] = React.useState<string | null>(null);
   const [avatarFailed, setAvatarFailed] = React.useState(false);
-  const [localActor, setLocalActor] = React.useState<string | null>(null);
   const menuRef = React.useRef<HTMLDivElement>(null);
 
-  // Check localStorage on initial client mount if cookie wasn't present
-  React.useEffect(() => {
-    if (!initialActor && !contextInitialActor && !session?.auth?.actor) {
-      try {
-        const stored = localStorage.getItem("proton-storage-user-auth");
-        if (stored) {
-          const parsed = JSON.parse(stored);
-          if (parsed?.actor) {
-            setLocalActor(parsed.actor);
-            document.cookie = `xpr_auth=${encodeURIComponent(parsed.actor)}; path=/; max-age=31536000; SameSite=Lax`;
-          }
-        }
-      } catch {}
-    }
-  }, [initialActor, contextInitialActor, session?.auth?.actor]);
-
-  // Determine active actor: live session actor > cookie initialActor > localStorage actor
-  const currentActor = session?.auth?.actor || contextInitialActor || initialActor || localActor;
+  const currentActor = actor;
   const isLoggedIn = Boolean(currentActor);
 
+  const displayedAvatar = currentActor ? avatarUrl : null;
+
   React.useEffect(() => {
-    if (!currentActor) {
-      setAvatarUrl(null);
-      setAvatarFailed(false);
-      return;
-    }
     let active = true;
+    if (!currentActor) return;
     getAccountInfo(currentActor)
       .then((info) => {
         if (active && info?.avatar) {
@@ -87,8 +68,12 @@ export function Header({ initialActor = null }: { initialActor?: string | null }
   }, [menuOpen]);
 
   // Close menu on route change
+  const prevPathname = React.useRef(pathname);
   React.useEffect(() => {
-    setMenuOpen(false);
+    if (prevPathname.current !== pathname) {
+      prevPathname.current = pathname;
+      setMenuOpen(false);
+    }
   }, [pathname]);
 
   return (
@@ -134,10 +119,14 @@ export function Header({ initialActor = null }: { initialActor?: string | null }
 
               <button 
                 className="header-login-btn"
-                onClick={login}
+                onClick={() => login()}
+                onPointerEnter={preloadWallet}
+                onFocus={preloadWallet}
+                onTouchStart={preloadWallet}
+                aria-busy={isConnecting}
               >
                 <Wallet size={15} />
-                <span>Log in</span>
+                <span>{isConnecting ? "Connecting…" : "Log in"}</span>
               </button>
             </>
           ) : (
@@ -169,9 +158,9 @@ export function Header({ initialActor = null }: { initialActor?: string | null }
                   }}
                   onClick={() => setMenuOpen(!menuOpen)}
                 >
-                  {avatarUrl && !avatarFailed ? (
+                  {displayedAvatar && !avatarFailed ? (
                     <img
-                      src={avatarUrl}
+                      src={displayedAvatar}
                       alt=""
                       referrerPolicy="no-referrer"
                       loading="lazy"

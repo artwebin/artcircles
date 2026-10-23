@@ -9,13 +9,17 @@
     "lint": "eslint"
   },
   "dependencies": {
+    "@greymass/eosio": "^0.6.11",
     "@proton/link": "^5.1.0",
+    "@proton/web-renderer": "^1.0.5",
     "@proton/web-sdk": "^5.1.0",
+    "jose": "^6.2.13",
     "lucide-react": "^1.55.0",
     "next": "16.4.0",
     "react": "19.3.0",
     "react-dom": "19.3.0",
-    "react-hot-toast": "^2.6.1"
+    "react-hot-toast": "^2.6.1",
+    "server-only": "^0.0.1"
   },
   "devDependencies": {
     "@tailwindcss/turbopack": "^4",
