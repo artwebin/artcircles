@@ -166,7 +166,7 @@ export default function HowItWorksPage() {
                     Automatic payouts & returned deposits
                   </h3>
                   <p className="text-body" style={{ color: "var(--text-secondary)", fontSize: "15px" }}>
-                    At each round deadline, the pot is sent automatically to that round&apos;s recipient. When the final round ends, every member&apos;s security deposit is unlocked and returned.
+                    The pot is sent as soon as everyone has paid, or automatically at the round deadline to that round&apos;s recipient. When the final round ends, every member&apos;s security deposit is unlocked and returned.
                   </p>
                 </div>
               </div>

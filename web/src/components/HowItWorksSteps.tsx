@@ -30,7 +30,7 @@ const STEPS: StepInfo[] = [
   {
     num: 4,
     title: "Pay each round, take the pot once",
-    desc: "Pay your share before the deadline, with a Telegram reminder the day before. When it's your turn, the pot arrives on its own.",
+    desc: "Pay your share before the deadline, with a Telegram reminder the day before. When it's your turn, the pot is sent as soon as everyone has paid, or automatically at the deadline.",
   },
 ];
 

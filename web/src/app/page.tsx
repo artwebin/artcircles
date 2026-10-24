@@ -4,23 +4,13 @@ import { Check } from "lucide-react";
 import CircleRing, { HERO_EXAMPLE } from "@/components/CircleRing";
 import { PROOF_CIRCLE_ID, EXPLORER_URL, CHAIN, PROOF_EVENTS } from "@/lib/config";
 import HowItWorksSteps from "@/components/HowItWorksSteps";
-import { getCircleEvents, CircleEvent } from "@/lib/history";
+import { getCirclesEvents, CircleEvent } from "@/lib/history";
 import ClientDeadline from "@/components/ClientDeadline";
 
 export default async function LandingPage() {
-  // Fetch on-chain events for circles referenced in PROOF_EVENTS
+  // Fetch on-chain events for circles referenced in PROOF_EVENTS in a single Hyperion query pass
   const circleIds = Array.from(new Set(PROOF_EVENTS.map((p) => p.circle)));
-  const eventsByCircle: Record<number, CircleEvent[]> = {};
-
-  await Promise.all(
-    circleIds.map(async (id) => {
-      try {
-        eventsByCircle[id] = await getCircleEvents(id);
-      } catch {
-        eventsByCircle[id] = [];
-      }
-    })
-  );
+  const eventsByCircle = await getCirclesEvents(circleIds);
 
   const proofRows = PROOF_EVENTS.map((item) => {
     const events = eventsByCircle[item.circle] || [];
@@ -220,7 +210,7 @@ export default async function LandingPage() {
               
               <div style={{ marginBottom: "var(--space-48)" }}>
                 <h3 className="text-h3" style={{ marginBottom: "12px", color: "var(--on-deep)" }}>Payouts happen even if we disappear.</h3>
-                <p className="text-body" style={{ color: "var(--on-deep-muted)" }}>Anyone can trigger a payout once a round is due. Our keeper does it within a minute of the deadline, and its code is public so anyone can run their own.</p>
+                <p className="text-body" style={{ color: "var(--on-deep-muted)" }}>The pot is paid out as soon as everyone has paid, or automatically at the deadline by our keeper within a minute, and its code is public so anyone can run their own.</p>
               </div>
               
               <div>

@@ -60,11 +60,29 @@ async function fetchHyperionWithFailover(path: string): Promise<any> {
 }
 
 /**
- * Retrieves all on-chain events for circle `id` from Hyperion.
- * Returns sorted chronologically.
+ * Retrieves all on-chain events for multiple circles from Hyperion in a single query pass.
+ * Returns a mapping of circleId -> CircleEvent[] sorted chronologically.
  */
-export async function getCircleEvents(id: string | number): Promise<CircleEvent[]> {
-  const targetId = String(id);
+export async function getCirclesEvents(
+  circleIds: (string | number)[],
+  options?: { afterIso?: string; createdSec?: number }
+): Promise<Record<number, CircleEvent[]>> {
+  const targetIds = new Set(circleIds.map((id) => String(id)));
+  const eventsMap: Record<number, CircleEvent[]> = {};
+  const completedAddedMap: Record<string, boolean> = {};
+
+  for (const id of circleIds) {
+    eventsMap[Number(id)] = [];
+  }
+
+  let afterParam = "";
+  if (options?.afterIso) {
+    afterParam = `&after=${encodeURIComponent(options.afterIso)}`;
+  } else if (options?.createdSec && options.createdSec > 0) {
+    const afterIso = new Date(options.createdSec * 1000).toISOString();
+    afterParam = `&after=${encodeURIComponent(afterIso)}`;
+  }
+
   const limit = 100;
   let skip = 0;
   let hasMore = true;
@@ -73,7 +91,7 @@ export async function getCircleEvents(id: string | number): Promise<CircleEvent[
   try {
     while (hasMore) {
       const data = await fetchHyperionWithFailover(
-        `/v2/history/get_actions?account=artcircles&filter=xtokens:transfer,artcircles:start&sort=asc&limit=${limit}&skip=${skip}`
+        `/v2/history/get_actions?account=artcircles&filter=xtokens:transfer,artcircles:start&sort=asc&limit=${limit}&skip=${skip}${afterParam}`
       );
 
       const actions = data?.actions;
@@ -90,12 +108,9 @@ export async function getCircleEvents(id: string | number): Promise<CircleEvent[
       }
     }
   } catch (err) {
-    console.warn(`Failed to fetch circle #${targetId} actions from Hyperion:`, err);
-    return [];
+    console.warn(`Failed to fetch circle actions from Hyperion:`, err);
+    return eventsMap;
   }
-
-  const events: CircleEvent[] = [];
-  let completedAdded = false;
 
   const payoutRegex = /^artcircles:\s*circle\s*(\d+),\s*round\s*(\d+)\s*payout$/i;
   const completedRegex = /^artcircles:\s*circle\s*(\d+)\s*completed,\s*deposit\s*refund\s*and\s*compensation$/i;
@@ -108,16 +123,17 @@ export async function getCircleEvents(id: string | number): Promise<CircleEvent[
     const trxId = action.trx_id || "";
 
     // 1. Started event
-    if (
-      act.account === "artcircles" &&
-      act.name === "start" &&
-      String(act.data?.id) === targetId
-    ) {
-      events.push({
-        type: "started",
-        trxId,
-        timestamp,
-      });
+    if (act.account === "artcircles" && act.name === "start") {
+      const circleIdStr = String(act.data?.id);
+      if (targetIds.has(circleIdStr)) {
+        const numId = Number(circleIdStr);
+        eventsMap[numId] = eventsMap[numId] || [];
+        eventsMap[numId].push({
+          type: "started",
+          trxId,
+          timestamp,
+        });
+      }
       continue;
     }
 
@@ -131,34 +147,58 @@ export async function getCircleEvents(id: string | number): Promise<CircleEvent[
 
       // Payout match
       const pMatch = memo.match(payoutRegex);
-      if (pMatch && pMatch[1] === targetId) {
-        const roundNum = parseInt(pMatch[2], 10);
-        events.push({
-          type: "payout",
-          round: roundNum,
-          to: act.data.to,
-          amount: act.data.quantity,
-          trxId,
-          timestamp,
-        });
-        continue;
-      }
-
-      // Completed match (group multiple member refunds into 1 completed event)
-      const cMatch = memo.match(completedRegex);
-      if (cMatch && cMatch[1] === targetId) {
-        if (!completedAdded) {
-          completedAdded = true;
-          events.push({
-            type: "completed",
+      if (pMatch) {
+        const circleIdStr = pMatch[1];
+        if (targetIds.has(circleIdStr)) {
+          const numId = Number(circleIdStr);
+          const roundNum = parseInt(pMatch[2], 10);
+          eventsMap[numId] = eventsMap[numId] || [];
+          eventsMap[numId].push({
+            type: "payout",
+            round: roundNum,
+            to: act.data.to,
+            amount: act.data.quantity,
             trxId,
             timestamp,
           });
         }
         continue;
       }
+
+      // Completed match (group multiple member refunds into 1 completed event per circle)
+      const cMatch = memo.match(completedRegex);
+      if (cMatch) {
+        const circleIdStr = cMatch[1];
+        if (targetIds.has(circleIdStr)) {
+          const numId = Number(circleIdStr);
+          if (!completedAddedMap[circleIdStr]) {
+            completedAddedMap[circleIdStr] = true;
+            eventsMap[numId] = eventsMap[numId] || [];
+            eventsMap[numId].push({
+              type: "completed",
+              trxId,
+              timestamp,
+            });
+          }
+        }
+        continue;
+      }
     }
   }
 
-  return events;
+  return eventsMap;
 }
+
+/**
+ * Retrieves all on-chain events for circle `id` from Hyperion.
+ * Pass `options.createdSec` (from circle.created) to restrict fetching from the circle creation timestamp onwards.
+ * Returns sorted chronologically.
+ */
+export async function getCircleEvents(
+  id: string | number,
+  options?: { afterIso?: string; createdSec?: number }
+): Promise<CircleEvent[]> {
+  const map = await getCirclesEvents([id], options);
+  return map[Number(id)] || [];
+}
+

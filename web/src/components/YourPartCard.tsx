@@ -58,18 +58,25 @@ export function YourPartCard({
     <div className="card">
       <h3 className="text-h3" style={{ marginBottom: "24px" }}>Your part</h3>
       <div style={{ background: "var(--brand-subtle)", padding: "16px", borderRadius: "var(--radius-md)", marginBottom: "24px" }}>
-        <p className="text-caption" style={{ marginBottom: "4px" }}>You take the pot</p>
+        <p className="text-caption" style={{ marginBottom: "4px" }}>
+          {me.received ? "You received the pot" : "You take the pot"}
+        </p>
         <p className="text-h3" style={{ marginBottom: "8px", color: "var(--brand)" }}>
-          {payoutDeadline ? (
+          {`Round ${payoutRound > 0 ? payoutRound : "?"}`}
+        </p>
+        <p className="text-caption">
+          {me.received ? (
+            `${fullPot} USDC received.`
+          ) : payoutDeadline ? (
             <ClientDeadline
               deadlineSec={payoutDeadline.deadlineSec}
-              prefix={`Round ${payoutRound}, `}
+              prefix={`${fullPot} USDC, sent to you as soon as everyone has paid, at the latest `}
+              suffix="."
             />
           ) : (
-            `Round ${payoutRound > 0 ? payoutRound : "?"}`
+            `${fullPot} USDC, sent to you as soon as everyone has paid, at the latest at the deadline.`
           )}
         </p>
-        <p className="text-caption">{fullPot} USDC, sent to you automatically</p>
       </div>
 
       <div style={{ display: "flex", justifyContent: "space-between", paddingBottom: "12px", borderBottom: "1px solid var(--border)", marginBottom: "12px" }}>

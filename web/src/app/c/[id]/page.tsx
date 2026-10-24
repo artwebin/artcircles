@@ -49,7 +49,9 @@ export default async function CirclePage({ params }: { params: Promise<{ id: str
   const chainTime = await getChainTime();
   const initialActor = await getSessionActor();
   const schedule = getSchedule(circle, chainTime);
-  const historyEventsRaw = await getCircleEvents(resolvedParams.id);
+  const historyEventsRaw = await getCircleEvents(resolvedParams.id, {
+    createdSec: circle.created,
+  });
   const historyEvents = [...historyEventsRaw].reverse();
 
   // Fetch avatar URLs from usersinfo for all members
@@ -219,11 +221,11 @@ export default async function CirclePage({ params }: { params: Promise<{ id: str
                       ) : schedule.currentRoundDeadline ? (
                         <ClientDeadline
                           deadlineSec={schedule.currentRoundDeadline.deadlineSec}
-                          prefix="Paid out automatically on "
+                          prefix="Paid out as soon as everyone has paid, or automatically at the deadline on "
                           suffix="."
                         />
                       ) : (
-                        "Paid out automatically at deadline."
+                        "Paid out as soon as everyone has paid, or automatically at the deadline."
                       )}
                     </p>
                     
@@ -263,9 +265,26 @@ export default async function CirclePage({ params }: { params: Promise<{ id: str
                 <div style={{ display: "flex", flexDirection: "column" }}>
                   {sortedMembers.map((m: any, index: number) => {
                     const isPaid = m.paidRound === circle.round;
-                    const isCurrentRecipient = m.slot === circle.round && circle.state === 1;
-                    const hasDefaulted = m.defaulted === 1;
+                    const isReceived = m.received === 1 || m.received === true || (circle.state >= 1 && m.slot < circle.round);
+                    const isCurrentRecipient = m.slot === circle.round && circle.state === 1 && !isReceived;
+                    const hasDefaulted = m.defaulted === 1 || m.defaulted === true;
                     const roundSchedule = m.slot !== 0 ? schedule.getRoundDeadline(m.slot) : null;
+
+                    // If member has already received the pot, find their payout event from getCircleEvents
+                    const payoutEvent = isReceived
+                      ? historyEventsRaw.find(
+                          (e) => e.type === "payout" && (e.round === m.slot || (e.round === undefined && e.to === m.account))
+                        )
+                      : null;
+
+                    const payoutSec = payoutEvent?.timestamp
+                      ? Math.floor(new Date(payoutEvent.timestamp).getTime() / 1000)
+                      : roundSchedule?.deadlineSec || null;
+
+                    const potAmountFormatted = (parseFloat(circle.amount) * circle.maxMembers).toFixed(2) + " USDC";
+                    const payoutAmt = payoutEvent?.amount
+                      ? parseFloat(payoutEvent.amount).toFixed(2) + " USDC"
+                      : potAmountFormatted;
 
                     return (
                       <div key={m.account} style={{ display: "flex", alignItems: "center", padding: "16px 24px", borderBottom: "1px solid var(--border)", background: isCurrentRecipient ? "var(--pot-subtle)" : "var(--surface)" }}>
@@ -284,7 +303,36 @@ export default async function CirclePage({ params }: { params: Promise<{ id: str
                         <div style={{ flex: 1 }}>
                           <div style={{ fontWeight: 700 }}>{m.account}</div>
                           <div className="text-caption" style={{ color: isCurrentRecipient ? "var(--pot-text)" : "var(--text-secondary)" }}>
-                            {roundSchedule ? (
+                            {isReceived ? (
+                              <>
+                                {payoutSec ? (
+                                  <ClientDeadline
+                                    deadlineSec={payoutSec}
+                                    prefix={`Got the pot: ${payoutAmt} on `}
+                                  />
+                                ) : (
+                                  `Got the pot: ${payoutAmt}`
+                                )}
+                                {payoutEvent?.trxId && (
+                                  <>
+                                    {" · "}
+                                    <a
+                                      href={`${EXPLORER_URL}/transaction/${payoutEvent.trxId}`}
+                                      target="_blank"
+                                      rel="noreferrer"
+                                      style={{
+                                        color: "var(--brand)",
+                                        textDecoration: "underline",
+                                        textUnderlineOffset: "3px",
+                                        fontWeight: 500,
+                                      }}
+                                    >
+                                      Transaction
+                                    </a>
+                                  </>
+                                )}
+                              </>
+                            ) : roundSchedule ? (
                               <ClientDeadline
                                 deadlineSec={roundSchedule.deadlineSec}
                                 prefix="Takes the pot "
