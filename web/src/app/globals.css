@@ -661,3 +661,342 @@ button:disabled {
   background: var(--brand);
 }
 
+/* ==========================================================================
+   Four Steps (Scrollytelling) - .steps-
+   ========================================================================== */
+
+/* Outer section on desktop */
+.steps-section {
+  position: relative;
+  background: var(--bg);
+  height: calc(4 * 80vh);
+}
+
+.steps-markers-container {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 1px;
+  height: 100%;
+  pointer-events: none;
+  visibility: hidden;
+}
+
+.steps-marker {
+  height: 80vh;
+}
+
+/* Sticky frame */
+.steps-sticky-frame {
+  position: sticky;
+  top: var(--header-height, 64px);
+  height: calc(100vh - var(--header-height, 64px));
+  display: flex;
+  align-items: center;
+  z-index: 10;
+}
+
+.steps-grid {
+  display: grid;
+  grid-template-columns: 5fr 7fr;
+  gap: var(--space-64);
+  align-items: center;
+  width: 100%;
+}
+
+/* Left column */
+.steps-left-col {
+  display: flex;
+  flex-direction: column;
+}
+
+.steps-stepper {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  margin-top: var(--space-32);
+  padding-left: 28px;
+}
+
+/* Progress track line */
+.steps-progress-track {
+  position: absolute;
+  left: 11px;
+  top: 14px;
+  bottom: 24px;
+  width: 2px;
+  background: var(--border);
+  border-radius: 1px;
+}
+
+.steps-progress-fill {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: var(--brand);
+  transform-origin: top;
+  border-radius: 1px;
+  transition: transform 120ms linear;
+}
+
+/* Step button */
+.steps-button {
+  all: unset;
+  cursor: pointer;
+  display: flex;
+  align-items: flex-start;
+  gap: 16px;
+  text-align: left;
+  border-radius: var(--radius-md);
+  padding: 8px;
+  margin-left: -8px;
+  transition: opacity 200ms ease;
+  opacity: 0.55;
+}
+
+.steps-button:hover {
+  opacity: 0.85;
+}
+
+.steps-button[aria-current="step"] {
+  opacity: 1;
+}
+
+.steps-badge {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: var(--brand-subtle);
+  color: var(--brand);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 13px;
+  font-weight: 700;
+  flex-shrink: 0;
+  margin-top: 2px;
+  transition: background-color 200ms ease, color 200ms ease, transform 200ms ease;
+  position: relative;
+  z-index: 2;
+}
+
+.steps-button[aria-current="step"] .steps-badge {
+  background: var(--brand);
+  color: #ffffff;
+  transform: scale(1.05);
+}
+
+.steps-btn-content {
+  flex: 1;
+}
+
+.steps-btn-title {
+  font-family: var(--font-bricolage), sans-serif;
+  font-size: 19px;
+  line-height: 24px;
+  font-weight: 700;
+  color: var(--text);
+  margin: 0;
+}
+
+/* Accordion description */
+.steps-desc-wrapper {
+  display: grid;
+  grid-template-rows: 0fr;
+  transition: grid-template-rows 280ms cubic-bezier(0.2, 0, 0, 1);
+}
+
+.steps-button[aria-current="step"] .steps-desc-wrapper {
+  grid-template-rows: 1fr;
+}
+
+.steps-desc-content {
+  overflow: hidden;
+}
+
+.steps-btn-desc {
+  font-size: 14px;
+  line-height: 20px;
+  color: var(--text-secondary);
+  margin: 6px 0 0;
+}
+
+/* Right column: Single stage card with 4 layers */
+.steps-right-col {
+  display: flex;
+  justify-content: center;
+}
+
+.steps-stage {
+  width: 100%;
+  max-width: 520px;
+  height: 420px;
+  position: relative;
+  overflow: hidden;
+  box-shadow: 0 12px 36px -8px rgba(11, 90, 78, 0.08), 0 4px 12px -2px rgba(0, 0, 0, 0.04);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: 0;
+}
+
+.steps-layer {
+  position: absolute;
+  inset: 0;
+  padding: var(--space-32);
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  transition: opacity 400ms cubic-bezier(0.2, 0, 0, 1), transform 400ms cubic-bezier(0.2, 0, 0, 1);
+}
+
+.steps-layer[data-active="true"] {
+  opacity: 1;
+  transform: none;
+  pointer-events: auto;
+}
+
+.steps-layer[data-active="false"] {
+  opacity: 0;
+  transform: translateY(12px);
+  pointer-events: none;
+}
+
+/* Mobile & Fallback Layout */
+.steps-mobile-container {
+  display: none;
+  flex-direction: column;
+  gap: var(--space-48);
+}
+
+.steps-mobile-step {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-16);
+}
+
+.steps-mobile-card {
+  width: 100%;
+  min-height: 340px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: var(--space-24);
+  box-shadow: 0 4px 16px -2px rgba(0, 0, 0, 0.05);
+  transition: opacity 500ms ease, transform 500ms ease;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+}
+
+.steps-mobile-card[data-active="false"] {
+  opacity: 0;
+  transform: translateY(16px);
+}
+
+.steps-mobile-card[data-active="true"] {
+  opacity: 1;
+  transform: none;
+}
+
+@media (max-width: 1023px) {
+  .steps-section {
+    height: auto;
+  }
+  .steps-sticky-frame {
+    display: none;
+  }
+  .steps-mobile-container {
+    display: flex;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .steps-section {
+    height: auto !important;
+  }
+  .steps-sticky-frame {
+    display: none !important;
+  }
+  .steps-mobile-container {
+    display: flex !important;
+  }
+  .steps-layer,
+  .steps-mobile-card,
+  .steps-desc-wrapper,
+  .steps-progress-fill,
+  .steps-badge {
+    transition: none !important;
+    animation: none !important;
+    opacity: 1 !important;
+    transform: none !important;
+  }
+}
+
+/* ==========================================================================
+   Already Tested On Chain - .proof-
+   ========================================================================== */
+.proof-section {
+  /* wrapper */
+}
+
+.proof-card {
+  padding: 0;
+  margin-bottom: var(--space-32);
+  overflow: hidden;
+}
+
+.proof-row {
+  padding: 24px;
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  gap: 24px;
+  align-items: flex-start;
+}
+
+.proof-row:last-child {
+  border-bottom: none;
+}
+
+.proof-date-col {
+  width: 140px;
+  flex-shrink: 0;
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--text-secondary);
+}
+
+.proof-content-col {
+  flex: 1;
+}
+
+.proof-title-link {
+  color: inherit;
+  text-decoration: none;
+  display: inline-block;
+  margin-bottom: 8px;
+}
+
+.proof-title-link:hover h3 {
+  color: var(--brand);
+}
+
+.proof-link-col {
+  align-self: flex-start;
+  flex-shrink: 0;
+}
+
+@media (max-width: 640px) {
+  .proof-row {
+    flex-direction: column;
+    gap: 12px;
+  }
+  .proof-date-col {
+    width: auto;
+  }
+}
+
+

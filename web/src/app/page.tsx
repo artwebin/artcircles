@@ -2,9 +2,49 @@ import Link from "next/link";
 import { Footer } from "@/components/layout/Footer";
 import { Check } from "lucide-react";
 import CircleRing, { HERO_EXAMPLE } from "@/components/CircleRing";
-import { PROOF_CIRCLE_ID, EXPLORER_URL, CHAIN } from "@/lib/config";
+import { PROOF_CIRCLE_ID, EXPLORER_URL, CHAIN, PROOF_EVENTS } from "@/lib/config";
+import HowItWorksSteps from "@/components/HowItWorksSteps";
+import { getCircleEvents, CircleEvent } from "@/lib/history";
+import ClientDeadline from "@/components/ClientDeadline";
 
-export default function LandingPage() {
+export default async function LandingPage() {
+  // Fetch on-chain events for circles referenced in PROOF_EVENTS
+  const circleIds = Array.from(new Set(PROOF_EVENTS.map((p) => p.circle)));
+  const eventsByCircle: Record<number, CircleEvent[]> = {};
+
+  await Promise.all(
+    circleIds.map(async (id) => {
+      try {
+        eventsByCircle[id] = await getCircleEvents(id);
+      } catch {
+        eventsByCircle[id] = [];
+      }
+    })
+  );
+
+  const proofRows = PROOF_EVENTS.map((item) => {
+    const events = eventsByCircle[item.circle] || [];
+    const matched = events.find((e) => {
+      if (item.type === "completed") {
+        return e.type === "completed";
+      }
+      if (item.type === "payout" && "round" in item) {
+        return e.type === "payout" && e.round === item.round;
+      }
+      return false;
+    });
+
+    const timestampSec = matched?.timestamp
+      ? Math.floor(new Date(matched.timestamp).getTime() / 1000)
+      : null;
+
+    return {
+      ...item,
+      trxId: matched?.trxId || null,
+      timestampSec,
+    };
+  });
+
   return (
     <>
       <div className="container" style={{ paddingTop: "var(--space-80)", paddingBottom: "var(--space-80)" }}>
@@ -89,92 +129,8 @@ export default function LandingPage() {
         </div>
       </div>
 
-      <div style={{ background: "var(--bg)" }}>
-        <div className="container" style={{ paddingTop: "var(--space-120)", paddingBottom: "var(--space-120)" }}>
-          {/* 3. Four steps */}
-          <section style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(400px, 1fr))", gap: "var(--space-64)" }}>
-            <div>
-              <h2 className="text-h2" style={{ marginBottom: "var(--space-24)", maxWidth: "300px" }}>Four steps, then it runs on its own.</h2>
-              <p className="text-body-lg" style={{ color: "var(--text-secondary)", marginBottom: "var(--space-32)", maxWidth: "340px" }}>
-                The organizer sets it up once. After that, payouts and reminders happen by themselves.
-              </p>
-              <Link href="/how-it-works" className="btn-ghost" style={{ textDecoration: "underline", textUnderlineOffset: "4px" }}>Read the full guide</Link>
-            </div>
-            
-            <div style={{ display: "flex", flexDirection: "column", gap: "var(--space-24)" }}>
-              {/* Step 1 */}
-              <div className="card" style={{ display: "flex", gap: "var(--space-24)", alignItems: "center" }}>
-                <div style={{ flex: 1 }}>
-                  <div style={{ width: "24px", height: "24px", borderRadius: "50%", background: "var(--brand-subtle)", color: "var(--brand)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "12px", fontWeight: "bold", marginBottom: "16px" }}>1</div>
-                  <h3 className="text-h3" style={{ marginBottom: "8px" }}>Create the circle</h3>
-                  <p className="text-caption">Choose the amount, how often, and how many people. You see the pot before you share anything.</p>
-                </div>
-                <div style={{ flex: 1, background: "var(--bg)", padding: "16px", borderRadius: "var(--radius-md)", border: "1px solid var(--border)" }}>
-                  <p style={{ fontWeight: 700, marginBottom: "12px" }}>8 members, 25.00 USDC every week</p>
-                  <div style={{ display: "flex", justifyContent: "space-between", fontSize: "13px", marginBottom: "4px" }}><span style={{ color: "var(--text-secondary)" }}>Pot each week</span><strong>200.00 USDC</strong></div>
-                  <div style={{ display: "flex", justifyContent: "space-between", fontSize: "13px" }}><span style={{ color: "var(--text-secondary)" }}>Security deposit</span><strong>25.00 USDC</strong></div>
-                </div>
-              </div>
-
-              {/* Step 2 */}
-              <div className="card" style={{ display: "flex", gap: "var(--space-24)", alignItems: "center" }}>
-                <div style={{ flex: 1 }}>
-                  <div style={{ width: "24px", height: "24px", borderRadius: "50%", background: "var(--brand-subtle)", color: "var(--brand)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "12px", fontWeight: "bold", marginBottom: "16px" }}>2</div>
-                  <h3 className="text-h3" style={{ marginBottom: "8px" }}>Share one link</h3>
-                  <p className="text-caption">Send it to your family or friends group. People join with one payment: a security deposit they get back at the end.</p>
-                </div>
-                <div style={{ flex: 1, padding: "16px" }}>
-                  <div style={{ display: "flex", border: "1px solid var(--border-strong)", borderRadius: "var(--radius-sm)", overflow: "hidden", marginBottom: "12px" }}>
-                    <div style={{ padding: "8px 12px", background: "var(--surface)", flex: 1, fontSize: "13px", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>circles.artwebin.com/...</div>
-                    <div style={{ padding: "8px 12px", background: "var(--brand)", color: "white", fontSize: "13px", fontWeight: 500 }}>Copy link</div>
-                  </div>
-                  <div style={{ height: "4px", background: "var(--surface-muted)", borderRadius: "2px", marginBottom: "4px" }}>
-                    <div style={{ width: "62%", height: "100%", background: "var(--brand)", borderRadius: "2px" }}></div>
-                  </div>
-                  <p style={{ fontSize: "11px", color: "var(--text-secondary)" }}>5 of 8 seats taken</p>
-                </div>
-              </div>
-
-              {/* Step 3 */}
-              <div className="card" style={{ display: "flex", gap: "var(--space-24)", alignItems: "center" }}>
-                <div style={{ flex: 1 }}>
-                  <div style={{ width: "24px", height: "24px", borderRadius: "50%", background: "var(--brand-subtle)", color: "var(--brand)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "12px", fontWeight: "bold", marginBottom: "16px" }}>3</div>
-                  <h3 className="text-h3" style={{ marginBottom: "8px" }}>Agree on the order</h3>
-                  <p className="text-caption">The organizer proposes who takes the pot when. Everyone approves it themselves before anything starts.</p>
-                </div>
-                <div style={{ flex: 1, padding: "16px", background: "var(--surface-muted)", borderRadius: "var(--radius-md)" }}>
-                  <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "12px", fontSize: "14px", fontWeight: 500 }}>
-                    <div style={{ display: "flex", gap: "12px" }}><span>1</span><span>alice</span></div>
-                    <span className="status-pill status-paid" style={{ transform: "scale(0.8)", transformOrigin: "right" }}><Check size={12}/> Approved</span>
-                  </div>
-                  <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "12px", fontSize: "14px", fontWeight: 500 }}>
-                    <div style={{ display: "flex", gap: "12px" }}><span>2</span><span>dan</span></div>
-                    <span className="status-pill status-paid" style={{ transform: "scale(0.8)", transformOrigin: "right" }}><Check size={12}/> Approved</span>
-                  </div>
-                  <div style={{ display: "flex", justifyContent: "space-between", fontSize: "14px", fontWeight: 500 }}>
-                    <div style={{ display: "flex", gap: "12px" }}><span>3</span><span>bob</span></div>
-                    <span className="status-pill status-neutral" style={{ transform: "scale(0.8)", transformOrigin: "right" }}>Waiting</span>
-                  </div>
-                </div>
-              </div>
-
-              {/* Step 4 */}
-              <div className="card" style={{ display: "flex", gap: "var(--space-24)", alignItems: "center" }}>
-                <div style={{ flex: 1 }}>
-                  <div style={{ width: "24px", height: "24px", borderRadius: "50%", background: "var(--brand-subtle)", color: "var(--brand)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "12px", fontWeight: "bold", marginBottom: "16px" }}>4</div>
-                  <h3 className="text-h3" style={{ marginBottom: "8px" }}>Pay each round, take the pot once</h3>
-                  <p className="text-caption">Pay your share before the deadline, with a Telegram reminder the day before. When it's your turn, the pot arrives on its own.</p>
-                </div>
-                <div style={{ flex: 1, padding: "16px", background: "var(--warning-bg)", borderRadius: "var(--radius-md)", border: "1px solid #F2B07A" }}>
-                  <p style={{ fontWeight: 700, fontSize: "14px", color: "var(--warning-text)", marginBottom: "4px" }}>Your payment of 25.00 USDC is due in 2 days</p>
-                  <p style={{ fontSize: "12px", color: "var(--warning-text)", marginBottom: "12px", opacity: 0.8 }}>Fri 17 Oct, 18:00 CEST</p>
-                  <button className="btn-primary btn-small" style={{ width: "100%" }}>Pay 25.00 USDC</button>
-                </div>
-              </div>
-            </div>
-          </section>
-        </div>
-      </div>
+      {/* 3. Four steps (scrollytelling) */}
+      <HowItWorksSteps />
 
       <div style={{ background: "var(--surface)", borderTop: "1px solid var(--border)" }}>
         <div className="container" style={{ paddingTop: "var(--space-120)", paddingBottom: "var(--space-120)" }}>
@@ -303,54 +259,45 @@ export default function LandingPage() {
             </p>
           </section>
           
-          <div className="card" style={{ padding: 0, marginBottom: "32px" }}>
-            {/* Event 1 */}
-            <div style={{ padding: "24px", borderBottom: "1px solid var(--border)", display: "flex", gap: "24px" }}>
-              <div style={{ width: "120px", flexShrink: 0, fontSize: "14px", fontWeight: 500, color: "var(--text-secondary)" }}>5 Oct 2026</div>
-              <div style={{ flex: 1 }}>
-                <h3 className="text-h3" style={{ marginBottom: "8px" }}>Circle #0 completed</h3>
-                <p className="text-body" style={{ color: "var(--text-secondary)" }}>Three members, three rounds, everyone paid on time. Each received the pot once and got their deposit back.</p>
+          <div className="card proof-card">
+            {proofRows.map((item, idx) => (
+              <div key={idx} className="proof-row">
+                <div className="proof-date-col">
+                  {item.timestampSec ? (
+                    <ClientDeadline deadlineSec={item.timestampSec} />
+                  ) : null}
+                </div>
+                <div className="proof-content-col">
+                  <Link href={`/c/${item.circle}`} className="proof-title-link">
+                    <h3 className="text-h3">{item.title}</h3>
+                  </Link>
+                  <p className="text-body" style={{ color: "var(--text-secondary)" }}>
+                    {item.text}
+                  </p>
+                </div>
+                <div className="proof-link-col">
+                  {item.trxId ? (
+                    <a
+                      href={`${EXPLORER_URL}/transaction/${item.trxId}`}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="btn-ghost"
+                      style={{ textDecoration: "underline", textUnderlineOffset: "4px" }}
+                    >
+                      View transaction
+                    </a>
+                  ) : (
+                    <Link
+                      href={`/c/${item.circle}`}
+                      className="btn-ghost"
+                      style={{ textDecoration: "underline", textUnderlineOffset: "4px" }}
+                    >
+                      View circle
+                    </Link>
+                  )}
+                </div>
               </div>
-              <div style={{ alignSelf: "start" }}>
-                <a href="#" className="btn-ghost" style={{ textDecoration: "underline", textUnderlineOffset: "4px" }}>View the contract</a>
-              </div>
-            </div>
-            
-            {/* Event 2 */}
-            <div style={{ padding: "24px", borderBottom: "1px solid var(--border)", display: "flex", gap: "24px" }}>
-              <div style={{ width: "120px", flexShrink: 0, fontSize: "14px", fontWeight: 500, color: "var(--text-secondary)" }}>6 Oct, 09:27</div>
-              <div style={{ flex: 1 }}>
-                <h3 className="text-h3" style={{ marginBottom: "8px" }}>Circle #1, round 1 paid out</h3>
-                <p className="text-body" style={{ color: "var(--text-secondary)" }}>One member missed the deadline. Their deposit covered it and the pot was paid in full.</p>
-              </div>
-              <div style={{ alignSelf: "start" }}>
-                <a href="#" className="btn-ghost" style={{ textDecoration: "underline", textUnderlineOffset: "4px" }}>View transaction</a>
-              </div>
-            </div>
-            
-            {/* Event 3 */}
-            <div style={{ padding: "24px", borderBottom: "1px solid var(--border)", display: "flex", gap: "24px" }}>
-              <div style={{ width: "120px", flexShrink: 0, fontSize: "14px", fontWeight: 500, color: "var(--text-secondary)" }}>7 Oct, 09:26</div>
-              <div style={{ flex: 1 }}>
-                <h3 className="text-h3" style={{ marginBottom: "8px" }}>Circle #1, round 2 paid out</h3>
-                <p className="text-body" style={{ color: "var(--text-secondary)" }}>The same member missed again with no deposit left. It was recorded as their debt, and that round's pot was smaller.</p>
-              </div>
-              <div style={{ alignSelf: "start" }}>
-                <a href="#" className="btn-ghost" style={{ textDecoration: "underline", textUnderlineOffset: "4px" }}>View the contract</a>
-              </div>
-            </div>
-            
-            {/* Event 4 */}
-            <div style={{ padding: "24px", display: "flex", gap: "24px" }}>
-              <div style={{ width: "120px", flexShrink: 0, fontSize: "14px", fontWeight: 500, color: "var(--text-secondary)" }}>8 Oct, 09:26</div>
-              <div style={{ flex: 1 }}>
-                <h3 className="text-h3" style={{ marginBottom: "8px" }}>Circle #1 completed</h3>
-                <p className="text-body" style={{ color: "var(--text-secondary)" }}>The debt was held back from that member's own pot and paid to the member who got less. All three ended with exactly 100.00.</p>
-              </div>
-              <div style={{ alignSelf: "start" }}>
-                <a href="#" className="btn-ghost" style={{ textDecoration: "underline", textUnderlineOffset: "4px" }}>View transaction</a>
-              </div>
-            </div>
+            ))}
           </div>
           
           <p className="text-caption">All code is open source. <a href="https://github.com/artwebin/artcircles" style={{ color: "var(--brand)", textDecoration: "underline", textUnderlineOffset: "4px", fontWeight: 500 }}>Read it on GitHub</a></p>

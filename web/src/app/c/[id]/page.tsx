@@ -3,6 +3,7 @@ import { getCircle, getMembers, getChainTime, getAccountInfo } from "@/lib/rpc";
 import { getValidAvatarUrl } from "@/lib/reputation";
 import { getSchedule } from "@/lib/schedule";
 import { getSessionActor } from "@/lib/auth/session";
+import { getCircleEvents } from "@/lib/history";
 import { EXPLORER_URL } from "@/lib/config";
 import Link from "next/link";
 import { notFound } from "next/navigation";
@@ -48,6 +49,8 @@ export default async function CirclePage({ params }: { params: Promise<{ id: str
   const chainTime = await getChainTime();
   const initialActor = await getSessionActor();
   const schedule = getSchedule(circle, chainTime);
+  const historyEventsRaw = await getCircleEvents(resolvedParams.id);
+  const historyEvents = [...historyEventsRaw].reverse();
 
   // Fetch avatar URLs from usersinfo for all members
   const memberProfiles = await Promise.all(
@@ -310,6 +313,73 @@ export default async function CirclePage({ params }: { params: Promise<{ id: str
                   })}
                 </div>
               </div>
+
+              {/* 5. History */}
+              {historyEvents && historyEvents.length > 0 && (
+                <div className="card" style={{ padding: 0 }}>
+                  <div style={{ padding: "24px", borderBottom: "1px solid var(--border)" }}>
+                    <h3 className="text-h3">History</h3>
+                  </div>
+                  
+                  <div style={{ display: "flex", flexDirection: "column" }}>
+                    {historyEvents.map((evt, idx) => {
+                      const isLast = idx === historyEvents.length - 1;
+                      const eventSec = Math.floor(new Date(evt.timestamp).getTime() / 1000);
+                      let title = "Circle started";
+                      if (evt.type === "payout") {
+                        const amt = evt.amount ? parseFloat(evt.amount).toFixed(2) + " USDC" : "";
+                        title = `Round ${evt.round} paid out: ${evt.to} got ${amt}`;
+                      } else if (evt.type === "completed") {
+                        title = "Circle completed";
+                      }
+
+                      return (
+                        <div 
+                          key={`${evt.trxId}-${evt.type}-${evt.round || ""}`} 
+                          style={{ 
+                            display: "flex", 
+                            padding: "16px 24px", 
+                            borderBottom: isLast ? "none" : "1px solid var(--border)", 
+                            gap: "16px", 
+                            alignItems: "start" 
+                          }}
+                        >
+                          <div 
+                            style={{ 
+                              width: "8px", 
+                              height: "8px", 
+                              borderRadius: "50%", 
+                              background: evt.type === "started" ? "var(--brand)" : "var(--pot-strong)", 
+                              marginTop: "6px",
+                              flexShrink: 0 
+                            }} 
+                          />
+                          <div style={{ flex: 1 }}>
+                            <p style={{ fontWeight: 700, marginBottom: "4px" }}>{title}</p>
+                            <p className="text-caption">
+                              <ClientDeadline deadlineSec={eventSec} />
+                            </p>
+                          </div>
+                          <a 
+                            href={`${EXPLORER_URL}/transaction/${evt.trxId}`} 
+                            target="_blank" 
+                            rel="noreferrer" 
+                            style={{ 
+                              color: "var(--brand)", 
+                              textDecoration: "underline", 
+                              textUnderlineOffset: "4px", 
+                              fontSize: "14px", 
+                              fontWeight: 500 
+                            }}
+                          >
+                            Transaction
+                          </a>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
 
             </div>
             
