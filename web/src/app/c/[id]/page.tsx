@@ -1,5 +1,8 @@
 import { Metadata } from "next";
-import { getCircle, getMembers, getChainTime } from "@/lib/rpc";
+import { getCircle, getMembers, getChainTime, getAccountInfo } from "@/lib/rpc";
+import { getValidAvatarUrl } from "@/lib/reputation";
+import { getSchedule } from "@/lib/schedule";
+import { getSessionActor } from "@/lib/auth/session";
 import { EXPLORER_URL } from "@/lib/config";
 import Link from "next/link";
 import { notFound } from "next/navigation";
@@ -8,6 +11,7 @@ import { InviteCard } from "@/components/InviteCard";
 import { ChevronLeft, Check, Clock, MinusCircle } from "lucide-react";
 import CircleRing, { RingMember } from "@/components/CircleRing";
 import { CircleStatusRing } from "@/components/CircleStatusRing";
+import { YourPartCard } from "@/components/YourPartCard";
 import { Footer } from "@/components/layout/Footer";
 
 export const dynamic = "force-dynamic";
@@ -41,6 +45,22 @@ export default async function CirclePage({ params }: { params: Promise<{ id: str
 
   const members = await getMembers(resolvedParams.id);
   const chainTime = await getChainTime();
+  const initialActor = await getSessionActor();
+  const schedule = getSchedule(circle, chainTime);
+
+  // Fetch avatar URLs from usersinfo for all members
+  const memberProfiles = await Promise.all(
+    members.map(async (m: any) => {
+      try {
+        const info = await getAccountInfo(m.account);
+        const avatarUrl = info?.avatar ? getValidAvatarUrl(info.avatar) : null;
+        return { account: m.account, avatar: avatarUrl };
+      } catch {
+        return { account: m.account, avatar: null };
+      }
+    })
+  );
+  const avatarMap = new Map(memberProfiles.map((p) => [p.account, p.avatar]));
 
   const parsedAmount = parseFloat(circle.amount).toFixed(2);
   let periodText = "every round";
@@ -55,16 +75,22 @@ export default async function CirclePage({ params }: { params: Promise<{ id: str
   const fullPot = (parseFloat(circle.amount) * circle.maxMembers).toFixed(2);
   const totalPaid = (parseFloat(circle.amount) * members.filter((m: any) => m.paidRound === circle.round).length).toFixed(2);
   
-  // Sort members by slot
-  const sortedMembers = [...members].sort((a, b) => {
-    if (a.slot === 0 && b.slot !== 0) return 1;
-    if (b.slot === 0 && a.slot !== 0) return -1;
-    return a.slot - b.slot;
-  });
+  // Sort members by slot and attach avatar
+  const sortedMembers = [...members]
+    .map((m: any) => ({
+      ...m,
+      avatar: avatarMap.get(m.account) || null,
+    }))
+    .sort((a, b) => {
+      if (a.slot === 0 && b.slot !== 0) return 1;
+      if (b.slot === 0 && a.slot !== 0) return -1;
+      return a.slot - b.slot;
+    });
 
   const ringMembers: RingMember[] = sortedMembers.map((m: any) => ({
     account: m.account,
     paid: circle.state === 1 ? m.paidRound >= circle.round : circle.state === 2,
+    avatar: m.avatar,
   }));
   const unpaidMembers = sortedMembers.filter((m: any) => m.paidRound < circle.round);
 
@@ -101,10 +127,13 @@ export default async function CirclePage({ params }: { params: Promise<{ id: str
                 circleState={circle.state}
                 amount={circle.amount}
                 depositRounds={circle.depositRounds}
-                members={members}
+                members={sortedMembers}
                 maxMembers={circle.maxMembers}
                 currentRound={circle.round}
                 organizer={circle.organizer}
+                roundStart={circle.roundStart}
+                periodSec={circle.periodSec}
+                chainTime={chainTime}
               />
 
               {/* 2. Status Card */}
@@ -158,12 +187,18 @@ export default async function CirclePage({ params }: { params: Promise<{ id: str
                   </div>
                   <div style={{ flex: "1 1 280px" }}>
                     <p className="text-label" style={{ color: "var(--text-secondary)", marginBottom: "8px" }}>Round {circle.round} of {circle.maxMembers}</p>
-                    <div style={{ display: "flex", alignItems: "baseline", gap: "12px", marginBottom: "8px" }}>
-                      <span className="text-amount">{fullPot} USDC</span>
-                      <span className="text-h2" style={{ color: "var(--pot-text)" }}>to {recipient ? recipient.account : 'someone'}</span>
+                    <div style={{ marginBottom: "8px" }}>
+                      <div className="text-h2" style={{ lineHeight: 1.15, wordBreak: "break-word" }}>
+                        <span>{fullPot} USDC </span>
+                        <span style={{ color: "var(--pot-text)" }}>to {recipient ? recipient.account : 'someone'}</span>
+                      </div>
                     </div>
-                    <p className="text-caption" style={{ marginBottom: "24px" }}>
-                      {circle.state === 2 ? "Circle completed." : "Paid out automatically at deadline."}
+                    <p className="text-caption" style={{ marginBottom: "24px" }} suppressHydrationWarning>
+                      {circle.state === 2
+                        ? "Circle completed."
+                        : schedule.currentRoundDeadline
+                          ? `Paid out automatically on ${schedule.currentRoundDeadline.deadlineFormatted}.`
+                          : "Paid out automatically at deadline."}
                     </p>
                     
                     <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "8px" }}>
@@ -204,19 +239,26 @@ export default async function CirclePage({ params }: { params: Promise<{ id: str
                     const isPaid = m.paidRound === circle.round;
                     const isCurrentRecipient = m.slot === circle.round && circle.state === 1;
                     const hasDefaulted = m.defaulted === 1;
+                    const roundSchedule = m.slot !== 0 ? schedule.getRoundDeadline(m.slot) : null;
 
                     return (
                       <div key={m.account} style={{ display: "flex", alignItems: "center", padding: "16px 24px", borderBottom: "1px solid var(--border)", background: isCurrentRecipient ? "var(--pot-subtle)" : "var(--surface)" }}>
                         <div style={{ width: "32px", fontSize: "14px", fontWeight: 500, color: "var(--text-secondary)" }}>
                           {m.slot !== 0 ? m.slot : (index + 1)}
                         </div>
-                        <div style={{ width: "36px", height: "36px", borderRadius: "50%", background: isCurrentRecipient ? "var(--pot-strong)" : "var(--brand-subtle)", color: isCurrentRecipient ? "#FFF" : "var(--brand)", display: "flex", alignItems: "center", justifyContent: "center", fontWeight: "bold", marginRight: "16px" }}>
-                          {m.account[0]}
-                        </div>
+                        {m.avatar ? (
+                          <div style={{ width: "36px", height: "36px", borderRadius: "50%", overflow: "hidden", marginRight: "16px", flexShrink: 0 }}>
+                            <img src={m.avatar} alt={m.account} style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                          </div>
+                        ) : (
+                          <div style={{ width: "36px", height: "36px", borderRadius: "50%", background: isCurrentRecipient ? "var(--pot-strong)" : "var(--brand-subtle)", color: isCurrentRecipient ? "#FFF" : "var(--brand)", display: "flex", alignItems: "center", justifyContent: "center", fontWeight: "bold", fontSize: "14px", marginRight: "16px", flexShrink: 0 }}>
+                            {m.account.slice(0, 2).toLowerCase()}
+                          </div>
+                        )}
                         <div style={{ flex: 1 }}>
                           <div style={{ fontWeight: 700 }}>{m.account}</div>
-                          <div className="text-caption" style={{ color: isCurrentRecipient ? "var(--pot-text)" : "var(--text-secondary)" }}>
-                            {m.slot !== 0 ? `Takes the pot Fri ${10 + m.slot * 7} Oct` : 'Joined'}
+                          <div className="text-caption" style={{ color: isCurrentRecipient ? "var(--pot-text)" : "var(--text-secondary)" }} suppressHydrationWarning>
+                            {roundSchedule ? `Takes the pot ${roundSchedule.deadlineFormatted}` : (m.slot !== 0 ? `Takes the pot in round ${m.slot}` : 'Joined')}
                           </div>
                         </div>
                         
@@ -236,40 +278,6 @@ export default async function CirclePage({ params }: { params: Promise<{ id: str
                   })}
                 </div>
               </div>
-              
-              {/* 5. History */}
-              <div className="card" style={{ padding: 0 }}>
-                <div style={{ padding: "24px" }}>
-                  <h3 className="text-h3">History</h3>
-                </div>
-                
-                <div style={{ display: "flex", flexDirection: "column" }}>
-                  <div style={{ display: "flex", padding: "16px 24px", borderBottom: "1px solid var(--border)", gap: "16px", alignItems: "start" }}>
-                    <div style={{ width: "8px", height: "8px", borderRadius: "50%", background: "var(--pot-strong)", marginTop: "6px" }}></div>
-                    <div style={{ flex: 1 }}>
-                      <p style={{ fontWeight: 700, marginBottom: "4px" }}>Round 2 paid out: dan got 200.00 USDC</p>
-                      <p className="text-caption">Fri 10 Oct, 18:00 CEST</p>
-                    </div>
-                    <a href="#" style={{ color: "var(--brand)", textDecoration: "underline", textUnderlineOffset: "4px", fontSize: "14px", fontWeight: 500 }}>Transaction</a>
-                  </div>
-                  <div style={{ display: "flex", padding: "16px 24px", borderBottom: "1px solid var(--border)", gap: "16px", alignItems: "start" }}>
-                    <div style={{ width: "8px", height: "8px", borderRadius: "50%", background: "var(--pot-strong)", marginTop: "6px" }}></div>
-                    <div style={{ flex: 1 }}>
-                      <p style={{ fontWeight: 700, marginBottom: "4px" }}>Round 1 paid out: alice got 200.00 USDC</p>
-                      <p className="text-caption">Fri 3 Oct, 18:00 CEST</p>
-                    </div>
-                    <a href="#" style={{ color: "var(--brand)", textDecoration: "underline", textUnderlineOffset: "4px", fontSize: "14px", fontWeight: 500 }}>Transaction</a>
-                  </div>
-                  <div style={{ display: "flex", padding: "16px 24px", gap: "16px", alignItems: "start" }}>
-                    <div style={{ width: "8px", height: "8px", borderRadius: "50%", background: "var(--brand)", marginTop: "6px" }}></div>
-                    <div style={{ flex: 1 }}>
-                      <p style={{ fontWeight: 700, marginBottom: "4px" }}>Circle started. All 8 members approved the order.</p>
-                      <p className="text-caption">Thu 2 Oct, 20:14 CEST</p>
-                    </div>
-                    <a href="#" style={{ color: "var(--brand)", textDecoration: "underline", textUnderlineOffset: "4px", fontSize: "14px", fontWeight: 500 }}>Transaction</a>
-                  </div>
-                </div>
-              </div>
 
             </div>
             
@@ -284,30 +292,14 @@ export default async function CirclePage({ params }: { params: Promise<{ id: str
                 />
               )}
 
-              {/* Your part (When active or completed) */}
+              {/* Your part (When active or completed, for logged-in members only) */}
               {(circle.state === 1 || circle.state === 2) && (
-                <div className="card">
-                  <h3 className="text-h3" style={{ marginBottom: "24px" }}>Your part</h3>
-                  <div style={{ background: "var(--brand-subtle)", padding: "16px", borderRadius: "var(--radius-md)", marginBottom: "24px" }}>
-                    <p className="text-caption" style={{ marginBottom: "4px" }}>You take the pot</p>
-                    <p className="text-h2" style={{ marginBottom: "8px", color: "var(--brand)" }}>Round 4, Fri 24 Oct</p>
-                    <p className="text-caption">200.00 USDC, sent to you automatically</p>
-                  </div>
-                  
-                  <div style={{ display: "flex", justifyContent: "space-between", paddingBottom: "12px", borderBottom: "1px solid var(--border)", marginBottom: "12px" }}>
-                    <span className="text-body" style={{ color: "var(--text-secondary)" }}>Paid so far</span>
-                    <span className="text-body" style={{ fontWeight: 700 }}>50.00 of 200.00</span>
-                  </div>
-                  <div style={{ display: "flex", justifyContent: "space-between", paddingBottom: "12px", borderBottom: "1px solid var(--border)", marginBottom: "12px" }}>
-                    <span className="text-body" style={{ color: "var(--text-secondary)" }}>Security deposit</span>
-                    <span className="text-body" style={{ fontWeight: 700 }}>25.00 held</span>
-                  </div>
-                  <div style={{ display: "flex", justifyContent: "space-between", paddingBottom: "16px", marginBottom: "8px" }}>
-                    <span className="text-body" style={{ color: "var(--text-secondary)" }}>Missed payments</span>
-                    <span className="text-body" style={{ fontWeight: 700 }}>None</span>
-                  </div>
-                  <p className="text-caption">Your deposit comes back when the circle ends.</p>
-                </div>
+                <YourPartCard
+                  circle={circle}
+                  members={sortedMembers}
+                  chainTime={chainTime}
+                  initialActor={initialActor}
+                />
               )}
 
               {/* Reminders */}

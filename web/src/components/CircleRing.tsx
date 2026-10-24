@@ -16,6 +16,8 @@ export interface RingMember {
   account: string;
   /** True when this member has paid the current round. */
   paid: boolean;
+  /** Optional profile avatar URL from usersinfo. */
+  avatar?: string | null;
   /** Optional fixed tone. Without it, tones follow the payout order. */
   tone?: MemberTone;
 }
@@ -282,18 +284,33 @@ export function CircleRing({
             {isViewer && !isCurrent && (
               <circle cx={x} cy={y} r={memberR + 4} fill="none" stroke={COLOR.brand} strokeWidth={1.5} strokeDasharray="4 4" />
             )}
-            {showInitials && (
+            {m.avatar ? (
+              <g>
+                <clipPath id={`avatar-clip-${i}-${m.account}`}>
+                  <circle cx={x} cy={y} r={memberR - 1} />
+                </clipPath>
+                <image
+                  href={m.avatar}
+                  x={x - memberR + 1}
+                  y={y - memberR + 1}
+                  width={(memberR - 1) * 2}
+                  height={(memberR - 1) * 2}
+                  clipPath={`url(#avatar-clip-${i}-${m.account})`}
+                  preserveAspectRatio="xMidYMid slice"
+                />
+              </g>
+            ) : showInitials && (
               <text
                 x={x}
-                y={y + memberR * 0.26}
+                y={y + memberR * 0.28}
                 textAnchor="middle"
                 className="font-heading"
                 fontFamily={HEADING_FONT}
-                fontSize={memberR * 0.78}
+                fontSize={memberR * (m.account.length >= 2 ? 0.65 : 0.78)}
                 fontWeight={700}
                 fill={tone.text}
               >
-                {m.account.charAt(0).toLowerCase()}
+                {m.account.slice(0, 2).toLowerCase()}
               </text>
             )}
             {m.paid && (

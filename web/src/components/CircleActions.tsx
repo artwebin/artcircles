@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { useProton } from "./ProtonProvider";
 import { formatContractError } from "@/lib/errors";
 import { getMembers, getCircle, clearRpcCache } from "@/lib/rpc";
+import { getSchedule } from "@/lib/schedule";
 import { ConfirmationSheet } from "./ConfirmationSheet";
 
 interface CircleActionsProps {
@@ -17,6 +18,9 @@ interface CircleActionsProps {
   maxMembers: number;
   currentRound: number;
   organizer: string;
+  roundStart?: number;
+  periodSec?: number;
+  chainTime?: number;
 }
 
 export function CircleActions({
@@ -28,6 +32,9 @@ export function CircleActions({
   maxMembers,
   currentRound,
   organizer,
+  roundStart,
+  periodSec,
+  chainTime,
 }: CircleActionsProps) {
   const router = useRouter();
   const { session, login } = useProton();
@@ -58,11 +65,21 @@ export function CircleActions({
   }, [members, customOrder.length]);
 
   if (!session) {
+    const canJoin = circleState === 0 && members.length < maxMembers;
+    if (canJoin) {
+      return (
+        <div style={{ marginTop: "24px" }}>
+          <button className="btn-primary" onClick={login}>
+            Login to participate
+          </button>
+        </div>
+      );
+    }
     return (
       <div style={{ marginTop: "24px" }}>
-        <button className="btn-primary" onClick={login}>
-          Login to participate
-        </button>
+        <Link href="/new" className="btn-primary" style={{ display: "inline-flex", alignItems: "center", textDecoration: "none" }}>
+          Start your own circle
+        </Link>
       </div>
     );
   }
@@ -424,16 +441,32 @@ export function CircleActions({
             </div>
           )}
           <div style={{ flex: 1 }}>
-            {circleState === 1 && me && me.paidRound < currentRound ? (
-              <>
-                <h3 className="text-h3" style={{ color: "var(--warning-text)", marginBottom: "8px" }}>
-                  Your payment of {parsedAmount.toFixed(2)} USDC is due in 2 days
-                </h3>
-                <p className="text-body" style={{ color: "var(--warning-text)" }}>
-                  Round {currentRound} closes Fri 17 Oct at 18:00 CEST. If you miss it, your security deposit covers this round.
-                </p>
-              </>
-            ) : (
+            {circleState === 1 && me && me.paidRound < currentRound ? (() => {
+              const schedule = getSchedule(
+                {
+                  round: currentRound,
+                  roundStart: roundStart ?? 0,
+                  periodSec: periodSec ?? 86400,
+                  maxMembers,
+                  state: circleState,
+                },
+                chainTime
+              );
+              const currentDeadline = schedule.currentRoundDeadline;
+              const dueText = currentDeadline ? schedule.formatDueIn(currentDeadline.deadlineSec, chainTime) : "due soon";
+              const closeText = currentDeadline ? currentDeadline.deadlineFormatted : "at deadline";
+
+              return (
+                <>
+                  <h3 className="text-h3" style={{ color: "var(--warning-text)", marginBottom: "8px" }} suppressHydrationWarning>
+                    Your payment of {parsedAmount.toFixed(2)} USDC is {dueText}
+                  </h3>
+                  <p className="text-body" style={{ color: "var(--warning-text)" }} suppressHydrationWarning>
+                    Round {currentRound} closes {closeText}. If you miss it, your security deposit covers this round.
+                  </p>
+                </>
+              );
+            })() : (
               <>
                 <h3 className="text-h3" style={{ marginBottom: "8px" }}>Next Action</h3>
                 <p className="text-body" style={{ color: "var(--text-secondary)" }}>
@@ -447,9 +480,6 @@ export function CircleActions({
           </div>
         </div>
       )}
-      <div style={{ textAlign: "right", fontSize: "14px", color: "var(--text-secondary)", marginBottom: "var(--space-24)" }}>
-        Logged in as <strong>{account}</strong> {isOrganizer && "(Organizer)"}
-      </div>
 
       {sheetConfig && (
         <ConfirmationSheet
