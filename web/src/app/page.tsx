@@ -4,36 +4,9 @@ import { Check } from "lucide-react";
 import CircleRing, { HERO_EXAMPLE } from "@/components/CircleRing";
 import { PROOF_CIRCLE_ID, EXPLORER_URL, CHAIN, PROOF_EVENTS } from "@/lib/config";
 import HowItWorksSteps from "@/components/HowItWorksSteps";
-import { getCirclesEvents, CircleEvent } from "@/lib/history";
 import ClientDeadline from "@/components/ClientDeadline";
 
-export default async function LandingPage() {
-  // Fetch on-chain events for circles referenced in PROOF_EVENTS in a single Hyperion query pass
-  const circleIds = Array.from(new Set(PROOF_EVENTS.map((p) => p.circle)));
-  const eventsByCircle = await getCirclesEvents(circleIds);
-
-  const proofRows = PROOF_EVENTS.map((item) => {
-    const events = eventsByCircle[item.circle] || [];
-    const matched = events.find((e) => {
-      if (item.type === "completed") {
-        return e.type === "completed";
-      }
-      if (item.type === "payout" && "round" in item) {
-        return e.type === "payout" && e.round === item.round;
-      }
-      return false;
-    });
-
-    const timestampSec = matched?.timestamp
-      ? Math.floor(new Date(matched.timestamp).getTime() / 1000)
-      : null;
-
-    return {
-      ...item,
-      trxId: matched?.trxId || null,
-      timestampSec,
-    };
-  });
+export default function LandingPage() {
 
   return (
     <>
@@ -250,23 +223,22 @@ export default async function LandingPage() {
           </section>
           
           <div className="card proof-card">
-            {proofRows.map((item, idx) => (
-              <div key={idx} className="proof-row">
-                <div className="proof-date-col">
-                  {item.timestampSec ? (
-                    <ClientDeadline deadlineSec={item.timestampSec} />
-                  ) : null}
-                </div>
-                <div className="proof-content-col">
-                  <Link href={`/c/${item.circle}`} className="proof-title-link">
-                    <h3 className="text-h3">{item.title}</h3>
-                  </Link>
-                  <p className="text-body" style={{ color: "var(--text-secondary)" }}>
-                    {item.text}
-                  </p>
-                </div>
-                <div className="proof-link-col">
-                  {item.trxId ? (
+            {PROOF_EVENTS.map((item, idx) => {
+              const timestampSec = Math.floor(new Date(item.timestamp).getTime() / 1000);
+              return (
+                <div key={idx} className="proof-row">
+                  <div className="proof-date-col">
+                    <ClientDeadline deadlineSec={timestampSec} />
+                  </div>
+                  <div className="proof-content-col">
+                    <Link href={`/c/${item.circle}`} className="proof-title-link">
+                      <h3 className="text-h3">{item.title}</h3>
+                    </Link>
+                    <p className="text-body" style={{ color: "var(--text-secondary)" }}>
+                      {item.text}
+                    </p>
+                  </div>
+                  <div className="proof-link-col">
                     <a
                       href={`${EXPLORER_URL}/transaction/${item.trxId}`}
                       target="_blank"
@@ -276,18 +248,10 @@ export default async function LandingPage() {
                     >
                       View transaction
                     </a>
-                  ) : (
-                    <Link
-                      href={`/c/${item.circle}`}
-                      className="btn-ghost"
-                      style={{ textDecoration: "underline", textUnderlineOffset: "4px" }}
-                    >
-                      View circle
-                    </Link>
-                  )}
+                  </div>
                 </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
           
           <p className="text-caption">All code is open source. <a href="https://github.com/artwebin/artcircles" style={{ color: "var(--brand)", textDecoration: "underline", textUnderlineOffset: "4px", fontWeight: 500 }}>Read it on GitHub</a></p>
