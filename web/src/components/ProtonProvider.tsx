@@ -9,6 +9,7 @@ import LoginModal, { type LoginFlow } from "@/components/auth/LoginModal";
 import { walletUiOptions } from "@/components/auth/walletTheme";
 import { installWalletDialogWatcher, setWalletDialogDismissListener } from "@/components/auth/walletDialog";
 import { describeShape, toSignedLoginRequest, type SignedLoginRequest } from "@/lib/auth/signedResult";
+import { isCancelError } from "@/lib/transact";
 
 export type WalletSession = (Omit<LinkSession, "auth"> & {
   auth: { actor: any; permission: any };
@@ -345,13 +346,16 @@ export function ProtonProvider({
         (walletSession as any).link?.transport?.ui?.close?.();
       } catch {}
       if (!isCurrent()) return;
+      const isCancel = isCancelError(e);
       setFlow((prev) =>
         prev
           ? {
               ...prev,
               stage: "ready",
               failedStep: 3,
-              error: "The signature request was not approved. You can try again.",
+              error: isCancel
+                ? "The signature request was not approved. You can try again."
+                : "Could not prepare the login request. Please try again.",
             }
           : prev
       );

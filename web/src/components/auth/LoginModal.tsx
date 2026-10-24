@@ -59,7 +59,11 @@ function stepDetail(step: number, state: StepState, flow: LoginFlow): string {
       if (state === "done") return "Signature received";
       if (state === "active") return "Approve the request in your wallet";
       if (state === "error") {
-        return flow.stage === "error" ? "The signed request could not be read" : "Signature request was not approved";
+        if (flow.stage === "error") return "The signed request could not be read";
+        if (flow.error && flow.error.startsWith("Could not prepare")) {
+          return "Could not prepare the login request";
+        }
+        return "Signature request was not approved";
       }
       return "Sign a one-time verification request";
     default:
