@@ -12,6 +12,7 @@ import { ChevronLeft, Check, Clock, MinusCircle } from "lucide-react";
 import CircleRing, { RingMember } from "@/components/CircleRing";
 import { CircleStatusRing } from "@/components/CircleStatusRing";
 import { YourPartCard } from "@/components/YourPartCard";
+import { ClientDeadline } from "@/components/ClientDeadline";
 import { Footer } from "@/components/layout/Footer";
 
 export const dynamic = "force-dynamic";
@@ -187,18 +188,40 @@ export default async function CirclePage({ params }: { params: Promise<{ id: str
                   </div>
                   <div style={{ flex: "1 1 280px" }}>
                     <p className="text-label" style={{ color: "var(--text-secondary)", marginBottom: "8px" }}>Round {circle.round} of {circle.maxMembers}</p>
-                    <div style={{ marginBottom: "8px" }}>
-                      <div className="text-h2" style={{ lineHeight: 1.15, wordBreak: "break-word" }}>
-                        <span>{fullPot} USDC </span>
-                        <span style={{ color: "var(--pot-text)" }}>to {recipient ? recipient.account : 'someone'}</span>
-                      </div>
+                    <div style={{ display: "flex", alignItems: "baseline", flexWrap: "wrap", gap: "10px", marginBottom: "8px" }}>
+                      <span style={{ 
+                        fontFamily: "var(--font-bricolage), sans-serif", 
+                        fontSize: "clamp(30px, 4.5vw, 40px)", 
+                        fontWeight: 700, 
+                        letterSpacing: "-0.025em", 
+                        lineHeight: 1.15,
+                        color: "var(--text)"
+                      }}>
+                        {fullPot} USDC
+                      </span>
+                      <span style={{ 
+                        fontFamily: "var(--font-bricolage), sans-serif", 
+                        fontSize: "clamp(30px, 4.5vw, 40px)", 
+                        fontWeight: 700, 
+                        letterSpacing: "-0.025em", 
+                        lineHeight: 1.15,
+                        color: "var(--pot-text)"
+                      }}>
+                        to {recipient ? recipient.account : 'someone'}
+                      </span>
                     </div>
-                    <p className="text-caption" style={{ marginBottom: "24px" }} suppressHydrationWarning>
-                      {circle.state === 2
-                        ? "Circle completed."
-                        : schedule.currentRoundDeadline
-                          ? `Paid out automatically on ${schedule.currentRoundDeadline.deadlineFormatted}.`
-                          : "Paid out automatically at deadline."}
+                    <p className="text-caption" style={{ marginBottom: "24px" }}>
+                      {circle.state === 2 ? (
+                        "Circle completed."
+                      ) : schedule.currentRoundDeadline ? (
+                        <ClientDeadline
+                          deadlineSec={schedule.currentRoundDeadline.deadlineSec}
+                          prefix="Paid out automatically on "
+                          suffix="."
+                        />
+                      ) : (
+                        "Paid out automatically at deadline."
+                      )}
                     </p>
                     
                     <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "8px" }}>
@@ -257,8 +280,17 @@ export default async function CirclePage({ params }: { params: Promise<{ id: str
                         )}
                         <div style={{ flex: 1 }}>
                           <div style={{ fontWeight: 700 }}>{m.account}</div>
-                          <div className="text-caption" style={{ color: isCurrentRecipient ? "var(--pot-text)" : "var(--text-secondary)" }} suppressHydrationWarning>
-                            {roundSchedule ? `Takes the pot ${roundSchedule.deadlineFormatted}` : (m.slot !== 0 ? `Takes the pot in round ${m.slot}` : 'Joined')}
+                          <div className="text-caption" style={{ color: isCurrentRecipient ? "var(--pot-text)" : "var(--text-secondary)" }}>
+                            {roundSchedule ? (
+                              <ClientDeadline
+                                deadlineSec={roundSchedule.deadlineSec}
+                                prefix="Takes the pot "
+                              />
+                            ) : m.slot !== 0 ? (
+                              `Takes the pot in round ${m.slot}`
+                            ) : (
+                              'Joined'
+                            )}
                           </div>
                         </div>
                         

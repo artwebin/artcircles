@@ -8,6 +8,8 @@ import { formatContractError } from "@/lib/errors";
 import { getMembers, getCircle, clearRpcCache } from "@/lib/rpc";
 import { getSchedule } from "@/lib/schedule";
 import { ConfirmationSheet } from "./ConfirmationSheet";
+import { ClientDeadline } from "./ClientDeadline";
+import { Check } from "lucide-react";
 
 interface CircleActionsProps {
   circleId: string;
@@ -429,6 +431,63 @@ export function CircleActions({
           )}
         </div>
       )}
+      {/* Payment Confirmation when round is paid */}
+      {circleState === 1 && me && me.paidRound >= currentRound && (() => {
+        const schedule = getSchedule(
+          {
+            round: currentRound,
+            roundStart: roundStart ?? 0,
+            periodSec: periodSec ?? 86400,
+            maxMembers,
+            state: circleState,
+          },
+          chainTime
+        );
+        const nextRound = currentRound + 1;
+        const nextDeadline = nextRound <= maxMembers ? schedule.getRoundDeadline(nextRound) : null;
+
+        return (
+          <div className="card" style={{ 
+            background: "var(--surface)", 
+            borderColor: "var(--border)",
+            display: "flex", 
+            gap: "16px", 
+            alignItems: "center", 
+            marginBottom: "var(--space-24)",
+            padding: "var(--space-20) var(--space-24)"
+          }}>
+            <div style={{ 
+              width: "36px", 
+              height: "36px", 
+              borderRadius: "50%", 
+              background: "var(--brand-subtle)", 
+              display: "flex", 
+              alignItems: "center", 
+              justifyContent: "center", 
+              color: "var(--brand)", 
+              flexShrink: 0 
+            }}>
+              <Check size={20} strokeWidth={2.5} />
+            </div>
+            <div style={{ flex: 1 }}>
+              <h3 className="text-h3" style={{ marginBottom: "4px" }}>
+                You paid round {currentRound}.
+              </h3>
+              <p className="text-body" style={{ color: "var(--text-secondary)" }}>
+                {nextRound <= maxMembers && nextDeadline ? (
+                  <>
+                    Your next payment of {parsedAmount.toFixed(2)} USDC is due{" "}
+                    <ClientDeadline deadlineSec={nextDeadline.deadlineSec} />.
+                  </>
+                ) : (
+                  "You have paid all rounds in this circle."
+                )}
+              </p>
+            </div>
+          </div>
+        );
+      })()}
+
       {actionButton && (
         <div className="card" style={{ 
           background: circleState === 1 && me && me.paidRound < currentRound ? "var(--warning-bg)" : "var(--surface)", 
@@ -454,15 +513,20 @@ export function CircleActions({
               );
               const currentDeadline = schedule.currentRoundDeadline;
               const dueText = currentDeadline ? schedule.formatDueIn(currentDeadline.deadlineSec, chainTime) : "due soon";
-              const closeText = currentDeadline ? currentDeadline.deadlineFormatted : "at deadline";
 
               return (
                 <>
                   <h3 className="text-h3" style={{ color: "var(--warning-text)", marginBottom: "8px" }} suppressHydrationWarning>
                     Your payment of {parsedAmount.toFixed(2)} USDC is {dueText}
                   </h3>
-                  <p className="text-body" style={{ color: "var(--warning-text)" }} suppressHydrationWarning>
-                    Round {currentRound} closes {closeText}. If you miss it, your security deposit covers this round.
+                  <p className="text-body" style={{ color: "var(--warning-text)" }}>
+                    Round {currentRound} closes{" "}
+                    {currentDeadline ? (
+                      <ClientDeadline deadlineSec={currentDeadline.deadlineSec} />
+                    ) : (
+                      "soon"
+                    )}
+                    . If you miss it, your security deposit covers this round.
                   </p>
                 </>
               );

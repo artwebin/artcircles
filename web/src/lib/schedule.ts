@@ -18,12 +18,16 @@ const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "
 
 /**
  * Formats a Date object in the user's local time:
- * "Sun 25 Oct at 07:29"
+ * If includeTime is true: "Sun 25 Oct at 07:29"
+ * If includeTime is false: "Sun 25 Oct"
  */
-export function formatDeadline(date: Date): string {
+export function formatDeadline(date: Date, includeTime = true): string {
   const dayName = DAYS[date.getDay()];
   const day = date.getDate();
   const month = MONTHS[date.getMonth()];
+  if (!includeTime) {
+    return `${dayName} ${day} ${month}`;
+  }
   const hours = String(date.getHours()).padStart(2, "0");
   const mins = String(date.getMinutes()).padStart(2, "0");
   return `${dayName} ${day} ${month} at ${hours}:${mins}`;

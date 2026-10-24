@@ -3,6 +3,7 @@
 import React from "react";
 import { useProton } from "./ProtonProvider";
 import { getSchedule } from "@/lib/schedule";
+import { ClientDeadline } from "./ClientDeadline";
 
 interface YourPartCardProps {
   circle: {
@@ -52,15 +53,21 @@ export function YourPartCard({
   const schedule = getSchedule(circle, chainTime);
   const payoutRound = me.slot;
   const payoutDeadline = payoutRound > 0 ? schedule.getRoundDeadline(payoutRound) : null;
-  const payoutDateFormatted = payoutDeadline ? payoutDeadline.deadlineFormatted : (payoutRound > 0 ? `Round ${payoutRound}` : "Waiting for order");
 
   return (
     <div className="card">
       <h3 className="text-h3" style={{ marginBottom: "24px" }}>Your part</h3>
       <div style={{ background: "var(--brand-subtle)", padding: "16px", borderRadius: "var(--radius-md)", marginBottom: "24px" }}>
         <p className="text-caption" style={{ marginBottom: "4px" }}>You take the pot</p>
-        <p className="text-h3" style={{ marginBottom: "8px", color: "var(--brand)" }} suppressHydrationWarning>
-          Round {payoutRound > 0 ? payoutRound : "?"}, {payoutDateFormatted}
+        <p className="text-h3" style={{ marginBottom: "8px", color: "var(--brand)" }}>
+          {payoutDeadline ? (
+            <ClientDeadline
+              deadlineSec={payoutDeadline.deadlineSec}
+              prefix={`Round ${payoutRound}, `}
+            />
+          ) : (
+            `Round ${payoutRound > 0 ? payoutRound : "?"}`
+          )}
         </p>
         <p className="text-caption">{fullPot} USDC, sent to you automatically</p>
       </div>
