@@ -279,7 +279,7 @@ export default async function CirclePage({ params }: { params: Promise<{ id: str
 
                     const payoutSec = payoutEvent?.timestamp
                       ? Math.floor(new Date(payoutEvent.timestamp).getTime() / 1000)
-                      : roundSchedule?.deadlineSec || null;
+                      : null;
 
                     const potAmountFormatted = (parseFloat(circle.amount) * circle.maxMembers).toFixed(2) + " USDC";
                     const payoutAmt = payoutEvent?.amount

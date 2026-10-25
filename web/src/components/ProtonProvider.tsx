@@ -222,13 +222,17 @@ export function ProtonProvider({
       });
     } catch (e) {
       if (flowId !== flowIdRef.current) return;
+      const isCancel = isCancelError(e);
       setFlow((prev) =>
         prev
           ? {
               ...prev,
               stage: "error",
               failedStep: 2,
-              error: errorMessage(e, "Could not start the login."),
+              isCancel,
+              error: isCancel
+                ? "Signature request was not approved. You can try again."
+                : "Could not prepare the login request. Please try again.",
             }
           : prev
       );
@@ -287,6 +291,9 @@ export function ProtonProvider({
         console.error("Wallet connection failed:", e);
         if (flowId !== flowIdRef.current) return;
         resetFlow();
+        if (isCancelError(e)) {
+          return;
+        }
         if (isChunkLoadError(e)) {
           toast("Application was updated. Reloading...", { icon: "ℹ️" });
           if (reloadForUpdate()) return;
@@ -318,8 +325,19 @@ export function ProtonProvider({
       }
     } catch (err) {
       if (!isCurrent()) return;
+      const isCancel = isCancelError(err);
       setFlow((prev) =>
-        prev ? { ...prev, stage: "error", failedStep: 2, error: errorMessage(err, "Could not start the login.") } : prev
+        prev
+          ? {
+              ...prev,
+              stage: "error",
+              failedStep: 2,
+              isCancel,
+              error: isCancel
+                ? "Signature request was not approved. You can try again."
+                : "Could not prepare the login request. Please try again.",
+            }
+          : prev
       );
       return;
     }
@@ -353,8 +371,9 @@ export function ProtonProvider({
               ...prev,
               stage: "ready",
               failedStep: 3,
+              isCancel,
               error: isCancel
-                ? "The signature request was not approved. You can try again."
+                ? "Signature request was not approved. You can try again."
                 : "Could not prepare the login request. Please try again.",
             }
           : prev
@@ -370,13 +389,17 @@ export function ProtonProvider({
       request = await toSignedLoginRequest(signed);
     } catch (e) {
       console.error("Could not read the wallet response:", e, describeShape(signed));
+      const isCancel = isCancelError(e);
       setFlow((prev) =>
         prev
           ? {
               ...prev,
               stage: "error",
               failedStep: 3,
-              error: errorMessage(e, "Could not read the wallet response."),
+              isCancel,
+              error: isCancel
+                ? "Signature request was not approved. You can try again."
+                : "Could not prepare the login request. Please try again.",
             }
           : prev
       );

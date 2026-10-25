@@ -12,6 +12,7 @@ export interface LoginFlow {
   profile: { actor: string; name?: string; avatar?: string; isVerified?: boolean };
   stage: LoginStage;
   error?: string;
+  isCancel?: boolean;
   /** The step that failed, shown with an error marker. */
   failedStep?: 2 | 3 | 4;
 }
@@ -53,17 +54,19 @@ function stepDetail(step: number, state: StepState, flow: LoginFlow): string {
       return `Connected as ${flow.actor}`;
     case 2:
       if (state === "done") return "Account found on XPR Network";
-      if (state === "error") return "Could not validate the account";
+      if (state === "error") {
+        if (flow.isCancel) return "Signature request was not approved";
+        return "Could not prepare the login request";
+      }
       return "Checking the account on XPR Network";
     case 3:
       if (state === "done") return "Signature received";
       if (state === "active") return "Approve the request in your wallet";
       if (state === "error") {
-        if (flow.stage === "error") return "The signed request could not be read";
-        if (flow.error && flow.error.startsWith("Could not prepare")) {
-          return "Could not prepare the login request";
+        if (flow.isCancel || (flow.error && flow.error.toLowerCase().includes("not approved"))) {
+          return "Signature request was not approved";
         }
-        return "Signature request was not approved";
+        return "Could not prepare the login request";
       }
       return "Sign a one-time verification request";
     default:
