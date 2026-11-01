@@ -6,7 +6,7 @@ const bc = new Blockchain();
 const circles = bc.createContract("artcircles", "target/artcircles.contract");
 const xtokens = bc.createContract("xtokens", "node_modules/proton-tsc/external/xtokens/xtokens");
 const proton = bc.createContract("eosio.proton", "mocks/target/eosio.proton.contract");
-const [alice, bob, carol] = bc.createAccounts("alice", "bob", "carol");
+const [alice, bob, carol, dave, erin] = bc.createAccounts("alice", "bob", "carol", "dave", "erin");
 
 const AMOUNT = "10.000000 XUSDC";
 const WEEK = 86400 * 7;
@@ -23,7 +23,7 @@ const join = (acc: string, memo = "join:0", qty = AMOUNT) =>
 // vert does not roll back state of failed transactions, so every test starts clean
 beforeEach(async () => {
   bc.resetTables();
-  await mintTokens(xtokens, "XUSDC", 6, 1000000, 1000, [alice, bob, carol]);
+  await mintTokens(xtokens, "XUSDC", 6, 1000000, 1000, [alice, bob, carol, dave, erin]);
   await circles.actions.create(["alice", "Family", AMOUNT, 3, WEEK, false, 1]).send("alice@active");
 });
 
@@ -367,6 +367,75 @@ describe("deposits, late payments and defaults", () => {
     expect(balance("carol")).to.equal("1000.000000 XUSDC");
     expect(balance("artcircles")).to.equal("0.000000 XUSDC");
     expect(rep("carol").defaulted).to.equal(1);
+  });
+});
+
+describe("deposit refill on payout and payout records", () => {
+  const ALL = ["alice", "bob", "carol", "dave", "erin"];
+  const pay = (acc: string) =>
+    xtokens.actions.transfer([acc, "artcircles", AMOUNT, "pay:1"]).send(`${acc}@active`);
+  const payout = () => circles.actions.payout([1]).send("bob@active");
+  const afterDeadline = () => bc.setTime(TimePointSec.fromInteger(circle(1).roundStart + circle(1).periodSec));
+  const member = (acc: string) => members(1).find((m: any) => m.account === acc);
+  const payouts = () => circles.tables.payouts(BigInt(1)).getTableRows();
+  const round = async (payers: string[]) => {
+    for (const a of payers) await pay(a);
+    if (payers.length < ALL.length) afterDeadline();
+    await payout();
+  };
+  const startCircle = async () => {
+    await circles.actions.create(["alice", "Five", AMOUNT, 5, WEEK, false, 1]).send("alice@active");
+    for (const a of ALL) await join(a, "join:1");
+    await circles.actions.setorder(["alice", 1, ALL]).send("alice@active");
+    for (const a of ALL) await circles.actions.approve([a, 1]).send(`${a}@active`);
+    await circles.actions.start(["alice", 1]).send("alice@active");
+  };
+
+  it("recipient with a used deposit refills it from the pot", async () => {
+    await startCircle();
+    await round(ALL);
+    await round(["alice", "bob", "dave", "erin"]); // carol misses, deposit covers
+    expect(member("carol").deposit).to.equal("0.000000 XUSDC");
+    await round(ALL); // carol's turn: 50 pot, 10 back into her deposit
+    expect(member("carol").deposit).to.equal(AMOUNT);
+    // carol: 1000 - 10 deposit - 20 paid + 40 received, refilled deposit still held
+    expect(balance("carol")).to.equal("1010.000000 XUSDC");
+    const p = payouts().find((r: any) => r.round === 3);
+    expect(p.paid).to.equal("40.000000 XUSDC");
+    expect(p.toDeposit).to.equal(AMOUNT);
+  });
+
+  it("public testnet circle 4 scenario: nobody gains or loses", async () => {
+    await startCircle();
+    await round(ALL);                                   // 1: alice
+    await round(["alice", "bob", "dave", "erin"]);       // 2: bob, carol missed
+    await round(ALL);                                   // 3: carol, deposit refilled
+    await round(["alice", "bob", "carol", "dave"]);      // 4: dave, erin missed
+    await round([]);                                    // 5: erin, nobody paid
+
+    expect(circle(1).state).to.equal(2);
+    for (const a of ALL) expect(balance(a)).to.equal("1000.000000 XUSDC");
+    expect(balance("artcircles")).to.equal("0.000000 XUSDC");
+
+    const last = payouts().find((r: any) => r.round === 5);
+    expect(last.recipient).to.equal("erin");
+    expect(last.paid).to.equal("40.000000 XUSDC");
+    expect(last.recipientMissed).to.equal(true);
+    expect(last.covered).to.deep.equal(["alice", "bob", "carol", "dave"]);
+    expect(last.unpaid).to.deep.equal([]);
+  });
+
+  it("records one payout row per round", async () => {
+    await startCircle();
+    await round(ALL);
+    await round(["alice", "bob", "dave", "erin"]);
+    const rows = payouts();
+    expect(rows.map((r: any) => r.round)).to.deep.equal([1, 2]);
+    expect(rows[0].recipient).to.equal("alice");
+    expect(rows[0].paid).to.equal("50.000000 XUSDC");
+    expect(rows[0].covered).to.deep.equal([]);
+    expect(rows[1].covered).to.deep.equal(["carol"]);
+    expect(rows[1].withheld).to.equal("0.000000 XUSDC");
   });
 });
 

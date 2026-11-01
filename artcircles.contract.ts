@@ -86,6 +86,26 @@ export class Reputation extends Table {
     get primary(): u64 { return this.account.N; }
 }
 
+// One row per paid-out round, so the actual outcome can be read without a history node.
+// scope = circle id
+@table("payouts")
+export class Payout extends Table {
+    constructor(
+        public round: u32 = 0,
+        public recipient: Name = EMPTY_NAME,
+        public paid: Asset = new Asset(),
+        public withheld: Asset = new Asset(),
+        public toDeposit: Asset = new Asset(),
+        public covered: Name[] = [],
+        public unpaid: Name[] = [],
+        public recipientMissed: bool = false,
+        public time: u32 = 0
+    ) { super(); }
+
+    @primary
+    get primary(): u64 { return <u64>this.round; }
+}
+
 // Index of circles per account, so an account's circles can be read without scanning every circle.
 // scope = account, one row per circle the account organizes or is a member of
 @table("memberships")
@@ -120,6 +140,10 @@ export class artcircles extends Contract {
 
     membersOf(id: u64): TableStore<Member> {
         return new TableStore<Member>(this.receiver, Name.fromU64(id));
+    }
+
+    payoutsOf(id: u64): TableStore<Payout> {
+        return new TableStore<Payout>(this.receiver, Name.fromU64(id));
     }
 
     membershipsOf(account: Name): TableStore<Membership> {
@@ -279,7 +303,8 @@ export class artcircles extends Contract {
     // Pays out the pot. Anyone can trigger it, the contract depends on no one.
     // Before the deadline: wait for everyone. After the deadline: unpaid shares
     // are covered from the deposit; without a deposit the member takes on debt
-    // and the pot is smaller.
+    // and the pot is smaller. A recipient whose deposit was used refills it from
+    // their own pot, so nobody receives the pot with an empty deposit.
     @action("payout")
     payout(id: u64): void {
         const circle = this.circles.requireGet(id, "Circle not found");
@@ -306,6 +331,9 @@ export class artcircles extends Contract {
         // 2. Collect what is actually available this round
         let collected: i64 = 0;
         let shortFromOthers: i64 = 0;
+        let recipientMissed = false;
+        const covered: Name[] = [];
+        const unpaid: Name[] = [];
         m = members.first();
         while (m) {
             const isRecipient = m.account.N == recipientN;
@@ -313,6 +341,7 @@ export class artcircles extends Contract {
                 collected += amount;
             } else if (isRecipient) {
                 // Recipient did not pay: their own share is simply netted from the pot
+                recipientMissed = true;
                 m.missed += 1;
                 m.paidRound = circle.round;
                 members.update(m, SAME_PAYER);
@@ -323,6 +352,7 @@ export class artcircles extends Contract {
                 m.paidRound = circle.round;
                 members.update(m, SAME_PAYER);
                 collected += amount;
+                covered.push(m.account);
             } else {
                 // No deposit left: record debt, the pot is smaller
                 m.missed += 1;
@@ -331,6 +361,7 @@ export class artcircles extends Contract {
                 m.paidRound = circle.round;
                 members.update(m, SAME_PAYER);
                 shortFromOthers += amount;
+                unpaid.push(m.account);
             }
             m = members.next(m);
         }
@@ -345,6 +376,17 @@ export class artcircles extends Contract {
             r.debt -= withheld;
             circle.reserve += withheld;
         }
+        // Refill the recipient's deposit before paying them, so a member who used
+        // their deposit cannot take the full pot and leave the rest uncovered.
+        // Not needed in the last round, there is nothing left to cover.
+        const sym = circle.amount.symbol;
+        const missingDeposit = this.depositOf(circle).amount - r.deposit.amount;
+        let toDeposit: i64 = 0;
+        if (missingDeposit > 0 && circle.round < circle.members) {
+            toDeposit = missingDeposit < payoutAmount ? missingDeposit : payoutAmount;
+            payoutAmount -= toDeposit;
+            r.deposit = new Asset(r.deposit.amount + toDeposit, sym);
+        }
         r.received = true;
         r.shortBy += shortFromOthers;
         members.update(r, SAME_PAYER);
@@ -354,6 +396,12 @@ export class artcircles extends Contract {
                 new Asset(payoutAmount, circle.amount.symbol),
                 `artcircles: circle ${id}, round ${circle.round} payout`);
         }
+
+        this.payoutsOf(id).store(new Payout(
+            circle.round, r.account,
+            new Asset(payoutAmount, sym), new Asset(withheld, sym), new Asset(toDeposit, sym),
+            covered, unpaid, recipientMissed, currentTimeSec()
+        ), this.contract);
 
         if (circle.round == circle.members) {
             this.finish(circle);
