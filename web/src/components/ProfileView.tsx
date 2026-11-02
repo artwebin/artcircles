@@ -407,7 +407,17 @@ export function ProfileView({
                           </span>
                         );
                       } else if (myMember.missed > 0) {
-                        line3 = `${potStr}Ended ${endedDateStr}. ${myMember.missed === 1 ? "One payment" : `${myMember.missed} payments`} covered by the deposit.`;
+                        if (c.payouts && c.payouts.length > 0) {
+                          const coveredCount = c.payouts.reduce(
+                            (acc: number, p: any) => acc + (p.covered?.includes(account) ? 1 : 0),
+                            0
+                          );
+                          line3 = coveredCount > 0
+                            ? `${potStr}Ended ${endedDateStr}. ${coveredCount === 1 ? "One payment" : `${coveredCount} payments`} covered by the deposit.`
+                            : `${potStr}Ended ${endedDateStr}.`;
+                        } else {
+                          line3 = `${potStr}Ended ${endedDateStr}. ${myMember.missed === 1 ? "One payment" : `${myMember.missed} payments`} covered by the deposit.`;
+                        }
                         rightPill = (
                           <span className="pill-missed-red">Missed {myMember.missed}</span>
                         );

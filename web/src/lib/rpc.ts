@@ -167,6 +167,27 @@ export async function getMembers(id: string, options?: QueryOptions) {
   );
 }
 
+export interface PayoutRow {
+  round: number;
+  recipient: string;
+  paid: string;        // "40.000000 XUSDC"
+  withheld: string;
+  toDeposit: string;
+  covered: string[];
+  unpaid: string[];
+  recipientMissed: boolean;
+  time: number;
+}
+
+export async function getPayouts(id: string, options?: QueryOptions): Promise<PayoutRow[]> {
+  const ttlMs = options?.fresh ? 0 : 10000;
+  try {
+    return await getAllRows<PayoutRow>({ code: "artcircles", scope: id, table: "payouts" }, 100, ttlMs);
+  } catch {
+    return []; // contract not upgraded yet, or circle without records
+  }
+}
+
 export interface MembershipRow {
   circle: number;
   organizer: boolean;
@@ -206,9 +227,10 @@ export async function getMyCircles(account: string, options?: QueryOptions) {
     memberships.map(async (m) => {
       const circleId = String(m.circle);
       try {
-        const [circle, members] = await Promise.all([
+        const [circle, members, payouts] = await Promise.all([
           getCircle(circleId, options),
           getMembers(circleId, options),
+          getPayouts(circleId, options),
         ]);
 
         if (!circle) return null;
@@ -219,6 +241,7 @@ export async function getMyCircles(account: string, options?: QueryOptions) {
         return {
           ...circle,
           membersList: members,
+          payouts,
           myMember,
           isOrganizer,
           isMember: Boolean(m.member) || !!myMember,

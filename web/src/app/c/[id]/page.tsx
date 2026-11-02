@@ -1,10 +1,11 @@
 import { Metadata } from "next";
-import { getCircle, getMembers, getChainTime, getAccountInfo } from "@/lib/rpc";
+import { getCircle, getMembers, getPayouts, getChainTime, getAccountInfo } from "@/lib/rpc";
 import { getValidAvatarUrl } from "@/lib/reputation";
 import { getSchedule } from "@/lib/schedule";
 import { getSessionActor } from "@/lib/auth/session";
 import { getCircleEvents } from "@/lib/history";
-import { EXPLORER_URL } from "@/lib/config";
+import { EXPLORER_URL, circleExplorerUrl } from "@/lib/config";
+import { roundStatus } from "@/lib/payouts";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { CircleActions } from "@/components/CircleActions";
@@ -45,7 +46,10 @@ export default async function CirclePage({ params }: { params: Promise<{ id: str
     notFound();
   }
 
-  const members = await getMembers(resolvedParams.id);
+  const [members, payouts] = await Promise.all([
+    getMembers(resolvedParams.id),
+    getPayouts(resolvedParams.id),
+  ]);
   const chainTime = await getChainTime();
   const initialActor = await getSessionActor();
   const schedule = getSchedule(circle, chainTime);
@@ -80,7 +84,25 @@ export default async function CirclePage({ params }: { params: Promise<{ id: str
   const recipient = members.find((m: any) => m.slot === circle.round);
   const fullPot = (parseFloat(circle.amount) * circle.maxMembers).toFixed(2);
   const totalPaid = (parseFloat(circle.amount) * members.filter((m: any) => m.paidRound === circle.round).length).toFixed(2);
+  const lastPayoutRow = payouts.find((p) => p.round === circle.maxMembers) || payouts.find((p) => p.round === circle.round);
   
+  // State 0 stage helpers
+  const isOrderSet = members.some((m: any) => m.slot !== 0);
+  const approvedCount = members.filter((m: any) => m.approved === 1).length;
+  const isFull = members.length >= circle.maxMembers;
+  const allApproved = isFull && approvedCount === circle.maxMembers;
+
+  let formingBadgeText = "Waiting for members";
+  if (isFull) {
+    if (!isOrderSet) {
+      formingBadgeText = "Waiting for payout order";
+    } else if (!allApproved) {
+      formingBadgeText = "Waiting for approvals";
+    } else {
+      formingBadgeText = "Ready to start";
+    }
+  }
+
   // Sort members by slot and attach avatar
   const sortedMembers = [...members]
     .map((m: any) => ({
@@ -95,7 +117,12 @@ export default async function CirclePage({ params }: { params: Promise<{ id: str
 
   const ringMembers: RingMember[] = sortedMembers.map((m: any) => ({
     account: m.account,
-    paid: circle.state === 1 ? m.paidRound >= circle.round : circle.state === 2,
+    paid:
+      circle.state === 1
+        ? m.paidRound >= circle.round
+        : circle.state === 2 && lastPayoutRow
+        ? roundStatus(lastPayoutRow, m.account) === "paid"
+        : false,
     avatar: m.avatar,
   }));
   const unpaidMembers = sortedMembers.filter((m: any) => m.paidRound < circle.round);
@@ -117,7 +144,11 @@ export default async function CirclePage({ params }: { params: Promise<{ id: str
                 
                 <div style={{ display: "flex", alignItems: "center", gap: "16px", marginBottom: "12px" }}>
                   <h1 className="text-h1">{circle.name}</h1>
-                  {circle.state === 0 && <span className="status-pill status-neutral">● Waiting for members</span>}
+                  {circle.state === 0 && (
+                    <span className={allApproved ? "status-pill status-paid" : "status-pill status-neutral"}>
+                      ● {formingBadgeText}
+                    </span>
+                  )}
                   {circle.state === 1 && <span className="status-pill status-paid"><div style={{width:"6px",height:"6px",borderRadius:"50%",background:"var(--brand)"}}></div> Active</span>}
                   {circle.state === 2 && <span className="status-pill status-paid">Completed</span>}
                 </div>
@@ -172,9 +203,9 @@ export default async function CirclePage({ params }: { params: Promise<{ id: str
                     <p className="text-body" style={{ color: "var(--text-secondary)" }}>
                       {members.length < circle.maxMembers 
                         ? "Share the invite link with your members so they can join with their security deposit." 
-                        : members.every((m: any) => !!m.approved) 
+                        : allApproved 
                           ? "All members have approved the payout order. The organizer can now start the circle."
-                          : members.some((m: any) => m.slot !== 0)
+                          : isOrderSet
                             ? "Waiting for all members to approve the payout order."
                             : "All seats are filled! Waiting for the organizer to set the payout order."}
                     </p>
@@ -192,64 +223,114 @@ export default async function CirclePage({ params }: { params: Promise<{ id: str
                     />
                   </div>
                   <div style={{ flex: "1 1 280px" }}>
-                    <p className="text-label" style={{ color: "var(--text-secondary)", marginBottom: "8px" }}>Round {circle.round} of {circle.maxMembers}</p>
-                    <div style={{ display: "flex", alignItems: "baseline", flexWrap: "wrap", gap: "10px", marginBottom: "8px" }}>
-                      <span style={{ 
-                        fontFamily: "var(--font-bricolage), sans-serif", 
-                        fontSize: "clamp(30px, 4.5vw, 40px)", 
-                        fontWeight: 700, 
-                        letterSpacing: "-0.025em", 
-                        lineHeight: 1.15,
-                        color: "var(--text)"
-                      }}>
-                        {fullPot} USDC
-                      </span>
-                      <span style={{ 
-                        fontFamily: "var(--font-bricolage), sans-serif", 
-                        fontSize: "clamp(30px, 4.5vw, 40px)", 
-                        fontWeight: 700, 
-                        letterSpacing: "-0.025em", 
-                        lineHeight: 1.15,
-                        color: "var(--pot-text)"
-                      }}>
-                        to {recipient ? recipient.account : 'someone'}
-                      </span>
-                    </div>
-                    <p className="text-caption" style={{ marginBottom: "24px" }}>
-                      {circle.state === 2 ? (
-                        "Circle completed."
-                      ) : schedule.currentRoundDeadline ? (
-                        <ClientDeadline
-                          deadlineSec={schedule.currentRoundDeadline.deadlineSec}
-                          prefix="Paid out as soon as everyone has paid, or automatically at the deadline on "
-                          suffix="."
-                        />
-                      ) : (
-                        "Paid out as soon as everyone has paid, or automatically at the deadline."
-                      )}
-                    </p>
-                    
-                    <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "8px" }}>
-                      <span className="text-label">{members.filter((m: any) => m.paidRound >= circle.round).length} of {circle.maxMembers} have paid this round</span>
-                      <span className="text-caption">{totalPaid} of {fullPot}</span>
-                    </div>
-                    <div style={{ height: "8px", background: "var(--surface-muted)", borderRadius: "var(--radius-full)", marginBottom: "12px" }}>
-                      <div style={{ 
-                        height: '100%', 
-                        background: 'var(--brand)', 
-                        borderRadius: 'var(--radius-full)', 
-                        width: `${(members.filter((m: any) => m.paidRound >= circle.round).length / circle.maxMembers) * 100}%` 
-                      }}></div>
-                    </div>
-                    {circle.state === 1 && unpaidMembers.length > 0 && (
-                      <p className="text-caption">
-                        Still to pay: {unpaidMembers.map((m: any) => m.account).join(", ")}.
-                      </p>
+                    {circle.state === 1 && (
+                      <>
+                        <p className="text-label" style={{ color: "var(--text-secondary)", marginBottom: "8px" }}>Round {circle.round} of {circle.maxMembers}</p>
+                        <div style={{ display: "flex", alignItems: "baseline", flexWrap: "wrap", gap: "10px", marginBottom: "8px" }}>
+                          <span style={{ 
+                            fontFamily: "var(--font-bricolage), sans-serif", 
+                            fontSize: "clamp(30px, 4.5vw, 40px)", 
+                            fontWeight: 700, 
+                            letterSpacing: "-0.025em", 
+                            lineHeight: 1.15,
+                            color: "var(--text)"
+                          }}>
+                            {fullPot} USDC
+                          </span>
+                          <span style={{ 
+                            fontFamily: "var(--font-bricolage), sans-serif", 
+                            fontSize: "clamp(30px, 4.5vw, 40px)", 
+                            fontWeight: 700, 
+                            letterSpacing: "-0.025em", 
+                            lineHeight: 1.15,
+                            color: "var(--pot-text)"
+                          }}>
+                            to {recipient ? recipient.account : 'someone'}
+                          </span>
+                        </div>
+                        <p className="text-caption" style={{ marginBottom: "24px" }}>
+                          {schedule.currentRoundDeadline ? (
+                            <ClientDeadline
+                              deadlineSec={schedule.currentRoundDeadline.deadlineSec}
+                              prefix="Paid out as soon as everyone has paid, or automatically at the deadline on "
+                              suffix="."
+                            />
+                          ) : (
+                            "Paid out as soon as everyone has paid, or automatically at the deadline."
+                          )}
+                        </p>
+                        
+                        <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "8px" }}>
+                          <span className="text-label">{members.filter((m: any) => m.paidRound >= circle.round).length} of {circle.maxMembers} have paid this round</span>
+                          <span className="text-caption">{totalPaid} of {fullPot}</span>
+                        </div>
+                        <div style={{ height: "8px", background: "var(--surface-muted)", borderRadius: "var(--radius-full)", marginBottom: "12px" }}>
+                          <div style={{ 
+                            height: '100%', 
+                            background: 'var(--brand)', 
+                            borderRadius: 'var(--radius-full)', 
+                            width: `${(members.filter((m: any) => m.paidRound >= circle.round).length / circle.maxMembers) * 100}%` 
+                          }}></div>
+                        </div>
+                        {unpaidMembers.length > 0 && (
+                          <p className="text-caption">
+                            Still to pay: {unpaidMembers.map((m: any) => m.account).join(", ")}.
+                          </p>
+                        )}
+                        {unpaidMembers.length === 0 && (
+                          <p className="text-caption" style={{ color: "var(--brand)" }}>
+                            All members have paid this round.
+                          </p>
+                        )}
+                      </>
                     )}
-                    {circle.state === 1 && unpaidMembers.length === 0 && (
-                      <p className="text-caption" style={{ color: "var(--brand)" }}>
-                        All members have paid this round.
-                      </p>
+
+                    {circle.state === 2 && lastPayoutRow && (
+                      <>
+                        <p className="text-label" style={{ color: "var(--text-secondary)", marginBottom: "8px" }}>Round {lastPayoutRow.round} of {circle.maxMembers}</p>
+                        <div style={{ display: "flex", alignItems: "baseline", flexWrap: "wrap", gap: "10px", marginBottom: "8px" }}>
+                          <span style={{ 
+                            fontFamily: "var(--font-bricolage), sans-serif", 
+                            fontSize: "clamp(30px, 4.5vw, 40px)", 
+                            fontWeight: 700, 
+                            letterSpacing: "-0.025em", 
+                            lineHeight: 1.15,
+                            color: "var(--text)"
+                          }}>
+                            {parseFloat(lastPayoutRow.paid).toFixed(2)} USDC
+                          </span>
+                          <span style={{ 
+                            fontFamily: "var(--font-bricolage), sans-serif", 
+                            fontSize: "clamp(30px, 4.5vw, 40px)", 
+                            fontWeight: 700, 
+                            letterSpacing: "-0.025em", 
+                            lineHeight: 1.15,
+                            color: "var(--pot-text)"
+                          }}>
+                            to {lastPayoutRow.recipient}
+                          </span>
+                        </div>
+                        <p className="text-caption" style={{ marginBottom: (lastPayoutRow.covered?.length || lastPayoutRow.unpaid?.length) ? "8px" : "0" }}>
+                          Circle completed.
+                        </p>
+                        {lastPayoutRow.covered && lastPayoutRow.covered.length > 0 && (
+                          <p className="text-caption" style={{ color: "var(--text-secondary)" }}>
+                            Covered by deposits: {lastPayoutRow.covered.join(", ")}
+                          </p>
+                        )}
+                        {lastPayoutRow.unpaid && lastPayoutRow.unpaid.length > 0 && (
+                          <p className="text-caption" style={{ color: "var(--text-secondary)" }}>
+                            Unpaid: {lastPayoutRow.unpaid.join(", ")}
+                          </p>
+                        )}
+                      </>
+                    )}
+
+                    {circle.state === 2 && !lastPayoutRow && (
+                      <>
+                        <h2 className="text-h2" style={{ marginBottom: "8px" }}>{circle.name}</h2>
+                        <p className="text-caption">Circle completed.</p>
+                      </>
                     )}
                   </div>
                 </div>
@@ -259,32 +340,67 @@ export default async function CirclePage({ params }: { params: Promise<{ id: str
               <div className="card" style={{ padding: 0 }}>
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "24px", borderBottom: "1px solid var(--border)" }}>
                   <h3 className="text-h3">Payout order</h3>
-                  <span className="text-caption">Approved by all {circle.maxMembers} members</span>
+                  {circle.state === 0 ? (
+                    isOrderSet && (
+                      <span className="text-caption">
+                        {allApproved
+                          ? `Approved by all ${circle.maxMembers} members`
+                          : `Approved by ${approvedCount} of ${circle.maxMembers} members`}
+                      </span>
+                    )
+                  ) : (
+                    <span className="text-caption">Approved by all {circle.maxMembers} members</span>
+                  )}
                 </div>
                 
                 <div style={{ display: "flex", flexDirection: "column" }}>
                   {sortedMembers.map((m: any, index: number) => {
-                    const isPaid = m.paidRound === circle.round;
+                    const isPaid = circle.state === 1 && m.paidRound >= circle.round;
                     const isReceived = m.received === 1 || m.received === true || (circle.state >= 1 && m.slot < circle.round);
                     const isCurrentRecipient = m.slot === circle.round && circle.state === 1 && !isReceived;
                     const hasDefaulted = m.defaulted === 1 || m.defaulted === true;
                     const roundSchedule = m.slot !== 0 ? schedule.getRoundDeadline(m.slot) : null;
 
-                    // If member has already received the pot, find their payout event from getCircleEvents
+                    // Payout data resolution: 1) payouts row, 2) Hyperion event, 3) fallback without amount/date
+                    const payoutRow = isReceived ? payouts.find((p) => p.round === m.slot) : null;
                     const payoutEvent = isReceived
                       ? historyEventsRaw.find(
                           (e) => e.type === "payout" && (e.round === m.slot || (e.round === undefined && e.to === m.account))
                         )
                       : null;
 
-                    const payoutSec = payoutEvent?.timestamp
-                      ? Math.floor(new Date(payoutEvent.timestamp).getTime() / 1000)
-                      : null;
+                    let gotPotContent: React.ReactNode = null;
+                    if (isReceived) {
+                      if (payoutRow) {
+                        const paidStr = `${parseFloat(payoutRow.paid).toFixed(2)} USDC`;
+                        gotPotContent = payoutRow.time ? (
+                          <ClientDeadline
+                            deadlineSec={payoutRow.time}
+                            prefix={`Got the pot: ${paidStr} on `}
+                          />
+                        ) : (
+                          `Got the pot: ${paidStr}`
+                        );
+                      } else if (payoutEvent && payoutEvent.amount) {
+                        const eventSec = payoutEvent.timestamp
+                          ? Math.floor(new Date(payoutEvent.timestamp).getTime() / 1000)
+                          : null;
+                        const paidStr = `${parseFloat(payoutEvent.amount).toFixed(2)} USDC`;
+                        gotPotContent = eventSec ? (
+                          <ClientDeadline
+                            deadlineSec={eventSec}
+                            prefix={`Got the pot: ${paidStr} on `}
+                          />
+                        ) : (
+                          `Got the pot: ${paidStr}`
+                        );
+                      } else {
+                        gotPotContent = "Got the pot";
+                      }
+                    }
 
-                    const potAmountFormatted = (parseFloat(circle.amount) * circle.maxMembers).toFixed(2) + " USDC";
-                    const payoutAmt = payoutEvent?.amount
-                      ? parseFloat(payoutEvent.amount).toFixed(2) + " USDC"
-                      : potAmountFormatted;
+                    const toDepositVal = payoutRow ? parseFloat(payoutRow.toDeposit) : 0;
+                    const withheldVal = payoutRow ? parseFloat(payoutRow.withheld) : 0;
 
                     return (
                       <div key={m.account} style={{ display: "flex", alignItems: "center", padding: "16px 24px", borderBottom: "1px solid var(--border)", background: isCurrentRecipient ? "var(--pot-subtle)" : "var(--surface)" }}>
@@ -305,31 +421,36 @@ export default async function CirclePage({ params }: { params: Promise<{ id: str
                           <div className="text-caption" style={{ color: isCurrentRecipient ? "var(--pot-text)" : "var(--text-secondary)" }}>
                             {isReceived ? (
                               <>
-                                {payoutSec ? (
-                                  <ClientDeadline
-                                    deadlineSec={payoutSec}
-                                    prefix={`Got the pot: ${payoutAmt} on `}
-                                  />
-                                ) : (
-                                  `Got the pot: ${payoutAmt}`
+                                <div>
+                                  {gotPotContent}
+                                  {payoutEvent?.trxId && (
+                                    <>
+                                      {" · "}
+                                      <a
+                                        href={`${EXPLORER_URL}/transaction/${payoutEvent.trxId}`}
+                                        target="_blank"
+                                        rel="noreferrer"
+                                        style={{
+                                          color: "var(--brand)",
+                                          textDecoration: "underline",
+                                          textUnderlineOffset: "3px",
+                                          fontWeight: 500,
+                                        }}
+                                      >
+                                        Transaction
+                                      </a>
+                                    </>
+                                  )}
+                                </div>
+                                {toDepositVal > 0 && (
+                                  <div style={{ marginTop: "2px" }}>
+                                    {toDepositVal.toFixed(2)} USDC went back into the deposit
+                                  </div>
                                 )}
-                                {payoutEvent?.trxId && (
-                                  <>
-                                    {" · "}
-                                    <a
-                                      href={`${EXPLORER_URL}/transaction/${payoutEvent.trxId}`}
-                                      target="_blank"
-                                      rel="noreferrer"
-                                      style={{
-                                        color: "var(--brand)",
-                                        textDecoration: "underline",
-                                        textUnderlineOffset: "3px",
-                                        fontWeight: 500,
-                                      }}
-                                    >
-                                      Transaction
-                                    </a>
-                                  </>
+                                {withheldVal > 0 && (
+                                  <div style={{ marginTop: "2px" }}>
+                                    {withheldVal.toFixed(2)} USDC withheld for missed payments
+                                  </div>
                                 )}
                               </>
                             ) : roundSchedule ? (
@@ -346,14 +467,30 @@ export default async function CirclePage({ params }: { params: Promise<{ id: str
                         </div>
                         
                         <div>
-                          {hasDefaulted ? (
+                          {circle.state === 1 && (
+                            hasDefaulted ? (
+                              <span className="status-pill status-neutral"><MinusCircle size={14}/> Defaulted</span>
+                            ) : isCurrentRecipient ? (
+                              <span className="status-pill" style={{ background: "var(--pot)", color: "var(--pot-text)" }}>Takes the pot now</span>
+                            ) : isPaid ? (
+                              <span className="status-pill status-paid"><Check size={14}/> Paid this round</span>
+                            ) : (
+                              <span className="status-pill status-neutral"><Clock size={14}/> Not paid yet</span>
+                            )
+                          )}
+                          {circle.state === 0 && (
+                            isOrderSet ? (
+                              m.approved === 1 ? (
+                                <span className="status-pill status-paid"><Check size={14}/> Approved</span>
+                              ) : (
+                                <span className="status-pill status-neutral"><Clock size={14}/> Waiting</span>
+                              )
+                            ) : (
+                              <span className="status-pill status-neutral">Joined</span>
+                            )
+                          )}
+                          {circle.state === 2 && hasDefaulted && (
                             <span className="status-pill status-neutral"><MinusCircle size={14}/> Defaulted</span>
-                          ) : isPaid ? (
-                            <span className="status-pill status-paid"><Check size={14}/> Paid this round</span>
-                          ) : isCurrentRecipient ? (
-                            <span className="status-pill" style={{ background: "var(--pot)", color: "var(--pot-text)" }}>Takes the pot now</span>
-                          ) : (
-                            <span className="status-pill status-neutral"><Clock size={14}/> Not paid yet</span>
                           )}
                         </div>
                       </div>
@@ -447,6 +584,8 @@ export default async function CirclePage({ params }: { params: Promise<{ id: str
                 <YourPartCard
                   circle={circle}
                   members={sortedMembers}
+                  payouts={payouts}
+                  historyEvents={historyEventsRaw}
                   chainTime={chainTime}
                   initialActor={initialActor}
                 />
@@ -492,7 +631,7 @@ export default async function CirclePage({ params }: { params: Promise<{ id: str
                 
                 <div style={{ marginTop: "24px", paddingTop: "24px", borderTop: "1px solid var(--border)", display: "flex", flexDirection: "column", gap: "16px" }}>
                   <Link href="/safety" style={{ color: "var(--brand)", textDecoration: "underline", textUnderlineOffset: "4px", fontWeight: 500, fontSize: "14px" }}>What happens if someone doesn't pay</Link>
-                  <a href={`${EXPLORER_URL}/contract/artcircles`} target="_blank" rel="noreferrer" style={{ color: "var(--brand)", textDecoration: "underline", textUnderlineOffset: "4px", fontWeight: 500, fontSize: "14px" }}>View this circle on the explorer</a>
+                  <a href={circleExplorerUrl(circle.id)} target="_blank" rel="noreferrer" style={{ color: "var(--brand)", textDecoration: "underline", textUnderlineOffset: "4px", fontWeight: 500, fontSize: "14px" }}>View this circle on the explorer</a>
                 </div>
               </div>
             </div>

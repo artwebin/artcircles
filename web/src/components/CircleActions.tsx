@@ -513,6 +513,8 @@ export function CircleActions({
               );
               const currentDeadline = schedule.currentRoundDeadline;
               const dueText = currentDeadline ? schedule.formatDueIn(currentDeadline.deadlineSec, chainTime) : "due soon";
+              const meDeposit = me?.deposit ? parseFloat(me.deposit) : 0;
+              const hasDepositCover = meDeposit >= parsedAmount;
 
               return (
                 <>
@@ -522,11 +524,13 @@ export function CircleActions({
                   <p className="text-body" style={{ color: "var(--warning-text)" }}>
                     Round {currentRound} closes{" "}
                     {currentDeadline ? (
-                      <ClientDeadline deadlineSec={currentDeadline.deadlineSec} />
+                      <ClientDeadline deadlineSec={currentDeadline.deadlineSec} suffix="." />
                     ) : (
-                      "soon"
-                    )}
-                    . If you miss it, your security deposit covers this round.
+                      "soon."
+                    )}{" "}
+                    {hasDepositCover
+                      ? "If you miss it, your security deposit covers this round."
+                      : "If you miss it, the unpaid amount is recorded as your debt and the pot is smaller."}
                   </p>
                 </>
               );

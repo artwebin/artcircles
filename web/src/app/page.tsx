@@ -2,7 +2,7 @@ import Link from "next/link";
 import { Footer } from "@/components/layout/Footer";
 import { Check } from "lucide-react";
 import CircleRing, { HERO_EXAMPLE } from "@/components/CircleRing";
-import { PROOF_CIRCLE_ID, EXPLORER_URL, CHAIN, PROOF_EVENTS } from "@/lib/config";
+import { PROOF_CIRCLE_ID, EXPLORER_URL, CHAIN, PROOF_EVENTS, contractExplorerUrl } from "@/lib/config";
 import HowItWorksSteps from "@/components/HowItWorksSteps";
 import ClientDeadline from "@/components/ClientDeadline";
 
@@ -144,7 +144,7 @@ export default function LandingPage() {
                 </div>
                 <div style={{ display: "flex", padding: "16px", background: "var(--surface)", gap: "16px" }}>
                   <div style={{ fontWeight: 700, width: "60px", fontSize: "14px" }}>Round 3</div>
-                  <div style={{ flex: 1, fontSize: "14px" }}>C's own turn. The 10.00 debt is held back from C's pot.</div>
+                  <div style={{ flex: 1, fontSize: "14px" }}>C receives the pot. 10.00 refills C&apos;s deposit first.</div>
                   <div style={{ background: "var(--pot-subtle)", color: "var(--pot-text)", padding: "4px 8px", borderRadius: "4px", fontSize: "12px", fontWeight: 700, alignSelf: "start" }}>C gets 10.00</div>
                 </div>
                 <div style={{ display: "flex", padding: "16px", background: "var(--surface)", gap: "16px" }}>
@@ -202,7 +202,7 @@ export default function LandingPage() {
                   <li><a href="https://github.com/artwebin/artcircles" style={{ color: "var(--on-deep-link)", textDecoration: "underline", textUnderlineOffset: "4px" }}>github.com/artwebin/artcircles</a></li>
                   <li><a href="https://x.com/XPRCircles" style={{ color: "var(--on-deep-link)", textDecoration: "underline", textUnderlineOffset: "4px" }}>x.com/XPRCircles</a></li>
                   <li><a href="https://t.me/artcircles_bot" style={{ color: "var(--on-deep-link)", textDecoration: "underline", textUnderlineOffset: "4px" }}>t.me/artcircles_bot</a></li>
-                  <li><a href={`${EXPLORER_URL}/contract/artcircles`} target="_blank" rel="noreferrer" style={{ color: "var(--on-deep-link)", textDecoration: "underline", textUnderlineOffset: "4px" }}>Contract on XPR {CHAIN === "mainnet" ? "Mainnet" : "Testnet"}</a></li>
+                  <li><a href={contractExplorerUrl()} target="_blank" rel="noreferrer" style={{ color: "var(--on-deep-link)", textDecoration: "underline", textUnderlineOffset: "4px" }}>Contract on XPR {CHAIN === "mainnet" ? "Mainnet" : "Testnet"}</a></li>
                 </ul>
                 
                 <p className="text-label" style={{ color: "var(--on-deep)", fontWeight: 700 }}>XPR Circles has no token. Any XPR Circles token or airdrop is a scam.</p>

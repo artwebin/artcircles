@@ -11,6 +11,16 @@ export const EXPLORER_URL =
     ? "https://explorer.xprnetwork.org"
     : "https://testnet.explorer.xprnetwork.org";
 
+export const CONTRACT = "artcircles";
+
+export const contractExplorerUrl = () =>
+  `${EXPLORER_URL}/account/${CONTRACT}?loadContract=true&tab=Tables&table=circles` +
+  `&account=${CONTRACT}&scope=${CONTRACT}&limit=100`;
+
+export const circleExplorerUrl = (id: number | string) =>
+  `${EXPLORER_URL}/account/${CONTRACT}?loadContract=true&tab=Tables&table=circles` +
+  `&account=${CONTRACT}&scope=${CONTRACT}&limit=1&lower_bound=${id}&upper_bound=${id}`;
+
 export const CHAIN_ID =
   CHAIN === "mainnet"
     ? "384da888112027f0321850a169f737c33e53b388aad48b5adace4bab97f437e0"

@@ -9,7 +9,7 @@ import {
   ExternalLink,
   AlertTriangle
 } from "lucide-react";
-import { EXPLORER_URL } from "@/lib/config";
+import { EXPLORER_URL, contractExplorerUrl } from "@/lib/config";
 
 export const metadata: Metadata = {
   title: "Safety & Trust Model - XPR Circles",
@@ -148,7 +148,7 @@ export default function SafetyPage() {
                 1. The Security Deposit
               </h3>
               <p className="text-body" style={{ color: "var(--text-secondary)", fontSize: "15px", marginBottom: "12px" }}>
-                To join a circle, each member deposits 1 to 3 rounds upfront. If someone misses their scheduled payment deadline, the contract automatically covers the round by deducting it from their deposit. The recipient still receives their full pot on time.
+                To join a circle, each member deposits 1 to 3 rounds upfront. If someone misses their scheduled payment deadline, the contract automatically covers the round by deducting it from their deposit. The recipient still receives their full pot on time. A member who used their deposit refills it from their own pot before receiving it.
               </p>
               <div style={{ background: "var(--brand-subtle)", padding: "12px 16px", borderRadius: "var(--radius-sm)" }}>
                 <p className="text-caption" style={{ color: "var(--brand)", fontWeight: 600 }}>
@@ -161,8 +161,11 @@ export default function SafetyPage() {
               <h3 className="text-h3" style={{ fontSize: "18px", marginBottom: "8px" }}>
                 2. On-Chain Reputation
               </h3>
-              <p className="text-body" style={{ color: "var(--text-secondary)", fontSize: "15px" }}>
+              <p className="text-body" style={{ color: "var(--text-secondary)", fontSize: "15px", marginBottom: "12px" }}>
                 If a member exhausts their security deposit and still fails to pay, the missed round is permanently recorded on their on-chain account as a default. Everyone on XPR Network can see an account&apos;s past completed circles, missed payments, and defaults before admitting them into a new circle.
+              </p>
+              <p className="text-body" style={{ color: "var(--text-secondary)", fontSize: "15px" }}>
+                A deposit covers a limited number of missed rounds. If a member who has already received the pot stops paying for longer than that, the members still waiting receive a smaller pot. Choose people you trust, and use a 2 or 3 round deposit for larger circles.
               </p>
             </div>
           </section>
@@ -202,7 +205,7 @@ export default function SafetyPage() {
                   <span style={{ fontWeight: 600, display: "block" }}>Contract on XPR Testnet</span>
                   <span className="text-caption">Account name: artcircles</span>
                 </div>
-                <a href={`${EXPLORER_URL}/contract/artcircles`} target="_blank" rel="noreferrer" className="btn-ghost" style={{ display: "inline-flex", alignItems: "center", gap: "4px" }}>
+                <a href={contractExplorerUrl()} target="_blank" rel="noreferrer" className="btn-ghost" style={{ display: "inline-flex", alignItems: "center", gap: "4px" }}>
                   Explorer <ExternalLink size={14} />
                 </a>
               </div>
