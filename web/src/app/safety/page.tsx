@@ -251,7 +251,7 @@ export default function SafetyPage() {
                   Testnet environment
                 </h3>
                 <p className="text-body" style={{ color: "var(--warning-text)", fontSize: "14px" }}>
-                  This application is currently live on XPR Network Testnet. All XUSDC tokens are test tokens and hold no monetary value. Mainnet deployment will occur following independent security review and multisig transfer to block producers.
+                  This application is currently live on XPR Network Testnet. All XUSDC and XMD tokens on testnet are test tokens and hold no monetary value. Mainnet deployment will occur following independent security review and multisig transfer to block producers.
                 </p>
               </div>
             </div>

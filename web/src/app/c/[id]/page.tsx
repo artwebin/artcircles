@@ -6,6 +6,7 @@ import { getSessionActor } from "@/lib/auth/session";
 import { getCircleEvents } from "@/lib/history";
 import { EXPLORER_URL, circleExplorerUrl } from "@/lib/config";
 import { roundStatus } from "@/lib/payouts";
+import { tokenOf } from "@/lib/tokens";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { CircleActions } from "@/components/CircleActions";
@@ -24,6 +25,7 @@ export async function generateMetadata({ params }: { params: Promise<{ id: strin
   const circle = await getCircle(resolvedParams.id);
   if (!circle) return { title: "Circle not found", robots: { index: false } };
 
+  const token = tokenOf(circle.amount);
   const parsedAmount = parseFloat(circle.amount).toFixed(2);
   let periodText = "a round";
   if (circle.periodSec === 86400) periodText = "a day";
@@ -33,7 +35,7 @@ export async function generateMetadata({ params }: { params: Promise<{ id: strin
 
   return {
     title: `${circle.name} - XPR Circles`,
-    description: `${circle.organizer} invited you to ${circle.name}, ${circle.maxMembers} members, ${parsedAmount} USDC ${periodText}`,
+    description: `${circle.organizer} invited you to ${circle.name}, ${circle.maxMembers} members, ${parsedAmount} ${token.label} ${periodText}`,
     robots: { index: false }
   };
 }
@@ -72,6 +74,7 @@ export default async function CirclePage({ params }: { params: Promise<{ id: str
   );
   const avatarMap = new Map(memberProfiles.map((p) => [p.account, p.avatar]));
 
+  const token = tokenOf(circle.amount);
   const parsedAmount = parseFloat(circle.amount).toFixed(2);
   let periodText = "every round";
   if (circle.periodSec === 86400) periodText = "every day";
@@ -153,7 +156,7 @@ export default async function CirclePage({ params }: { params: Promise<{ id: str
                   {circle.state === 2 && <span className="status-pill status-paid">Completed</span>}
                 </div>
                 <p className="text-body" style={{ color: "var(--text-secondary)" }}>
-                  Organized by {circle.organizer}. {circle.maxMembers} members, {parsedAmount} USDC {periodText}.
+                  Organized by {circle.organizer}. {circle.maxMembers} members, {parsedAmount} {token.label} {periodText}.
                 </p>
               </div>
 
@@ -182,6 +185,7 @@ export default async function CirclePage({ params }: { params: Promise<{ id: str
                         members={ringMembers}
                         currentRound={0}
                         potAmount={fullPot}
+                        token={token.label}
                       />
                     </div>
                   )}
@@ -220,6 +224,7 @@ export default async function CirclePage({ params }: { params: Promise<{ id: str
                       members={ringMembers}
                       currentRound={circle.state === 1 ? circle.round : circle.maxMembers}
                       potAmount={fullPot}
+                      token={token.label}
                     />
                   </div>
                   <div style={{ flex: "1 1 280px" }}>
@@ -235,7 +240,7 @@ export default async function CirclePage({ params }: { params: Promise<{ id: str
                             lineHeight: 1.15,
                             color: "var(--text)"
                           }}>
-                            {fullPot} USDC
+                            {fullPot} {token.label}
                           </span>
                           <span style={{ 
                             fontFamily: "var(--font-bricolage), sans-serif", 
@@ -297,7 +302,7 @@ export default async function CirclePage({ params }: { params: Promise<{ id: str
                             lineHeight: 1.15,
                             color: "var(--text)"
                           }}>
-                            {parseFloat(lastPayoutRow.paid).toFixed(2)} USDC
+                            {parseFloat(lastPayoutRow.paid).toFixed(2)} {token.label}
                           </span>
                           <span style={{ 
                             fontFamily: "var(--font-bricolage), sans-serif", 
@@ -372,7 +377,7 @@ export default async function CirclePage({ params }: { params: Promise<{ id: str
                     let gotPotContent: React.ReactNode = null;
                     if (isReceived) {
                       if (payoutRow) {
-                        const paidStr = `${parseFloat(payoutRow.paid).toFixed(2)} USDC`;
+                        const paidStr = `${parseFloat(payoutRow.paid).toFixed(2)} ${token.label}`;
                         gotPotContent = payoutRow.time ? (
                           <ClientDeadline
                             deadlineSec={payoutRow.time}
@@ -385,7 +390,7 @@ export default async function CirclePage({ params }: { params: Promise<{ id: str
                         const eventSec = payoutEvent.timestamp
                           ? Math.floor(new Date(payoutEvent.timestamp).getTime() / 1000)
                           : null;
-                        const paidStr = `${parseFloat(payoutEvent.amount).toFixed(2)} USDC`;
+                        const paidStr = `${parseFloat(payoutEvent.amount).toFixed(2)} ${token.label}`;
                         gotPotContent = eventSec ? (
                           <ClientDeadline
                             deadlineSec={eventSec}
@@ -444,12 +449,12 @@ export default async function CirclePage({ params }: { params: Promise<{ id: str
                                 </div>
                                 {toDepositVal > 0 && (
                                   <div style={{ marginTop: "2px" }}>
-                                    {toDepositVal.toFixed(2)} USDC went back into the deposit
+                                    {toDepositVal.toFixed(2)} {token.label} went back into the deposit
                                   </div>
                                 )}
                                 {withheldVal > 0 && (
                                   <div style={{ marginTop: "2px" }}>
-                                    {withheldVal.toFixed(2)} USDC withheld for missed payments
+                                    {withheldVal.toFixed(2)} {token.label} withheld for missed payments
                                   </div>
                                 )}
                               </>
@@ -512,7 +517,7 @@ export default async function CirclePage({ params }: { params: Promise<{ id: str
                       const eventSec = Math.floor(new Date(evt.timestamp).getTime() / 1000);
                       let title = "Circle started";
                       if (evt.type === "payout") {
-                        const amt = evt.amount ? parseFloat(evt.amount).toFixed(2) + " USDC" : "";
+                        const amt = evt.amount ? parseFloat(evt.amount).toFixed(2) + " " + token.label : "";
                         title = `Round ${evt.round} paid out: ${evt.to} got ${amt}`;
                       } else if (evt.type === "completed") {
                         title = "Circle completed";
@@ -609,7 +614,7 @@ export default async function CirclePage({ params }: { params: Promise<{ id: str
                 <div style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
                   <div style={{ display: "flex", justifyContent: "space-between" }}>
                     <span className="text-body" style={{ color: "var(--text-secondary)" }}>Each round</span>
-                    <span className="text-body" style={{ fontWeight: 700 }}>{parsedAmount} USDC</span>
+                    <span className="text-body" style={{ fontWeight: 700 }}>{parsedAmount} {token.label}</span>
                   </div>
                   <div style={{ display: "flex", justifyContent: "space-between" }}>
                     <span className="text-body" style={{ color: "var(--text-secondary)" }}>How often</span>
@@ -617,11 +622,11 @@ export default async function CirclePage({ params }: { params: Promise<{ id: str
                   </div>
                   <div style={{ display: "flex", justifyContent: "space-between" }}>
                     <span className="text-body" style={{ color: "var(--text-secondary)" }}>Pot</span>
-                    <span className="text-body" style={{ fontWeight: 700 }}>{fullPot} USDC</span>
+                    <span className="text-body" style={{ fontWeight: 700 }}>{fullPot} {token.label}</span>
                   </div>
                   <div style={{ display: "flex", justifyContent: "space-between" }}>
                     <span className="text-body" style={{ color: "var(--text-secondary)" }}>Security deposit</span>
-                    <span className="text-body" style={{ fontWeight: 700 }}>{(parseFloat(circle.amount) * circle.depositRounds).toFixed(2)} USDC</span>
+                    <span className="text-body" style={{ fontWeight: 700 }}>{(parseFloat(circle.amount) * circle.depositRounds).toFixed(2)} {token.label}</span>
                   </div>
                   <div style={{ display: "flex", justifyContent: "space-between" }}>
                     <span className="text-body" style={{ color: "var(--text-secondary)" }}>Members</span>

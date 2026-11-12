@@ -1,3 +1,5 @@
+import { TokenInfo, DEFAULT_TOKEN } from "./tokens";
+
 const DEFAULT_TESTNET_ENDPOINTS = [
   "https://rpc.api.testnet.metalx.com",
   "https://proton-testnet.eoscafeblock.com",
@@ -293,22 +295,26 @@ export async function getAccountInfo(account: string) {
   }
 }
 
-export async function getXusdcBalance(account: string): Promise<number> {
+export async function getTokenBalance(account: string, token: TokenInfo = DEFAULT_TOKEN): Promise<number> {
   try {
     const data = await fetchWithFailover("/v1/chain/get_table_rows", {
-      code: "xtokens",
+      code: token.contract,
       scope: account,
       table: "accounts",
       limit: 100,
       json: true,
     });
-    const row = (data.rows || []).find((r: any) => r.balance && r.balance.endsWith("XUSDC"));
+    const row = (data.rows || []).find((r: any) => r.balance && r.balance.endsWith(token.symbol));
     if (!row) return 0;
     return parseFloat(row.balance.split(" ")[0]);
   } catch (e) {
-    console.warn("Failed to fetch XUSDC balance", e);
+    console.warn(`Failed to fetch ${token.symbol} balance`, e);
     return 0;
   }
+}
+
+export async function getXusdcBalance(account: string): Promise<number> {
+  return getTokenBalance(account, DEFAULT_TOKEN);
 }
 
 export async function getChainAccount(account: string): Promise<{ exists: boolean; created: string | null }> {

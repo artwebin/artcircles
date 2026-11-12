@@ -7,6 +7,7 @@ import { useProton } from "@/components/ProtonProvider";
 import { getMemberships, clearRpcCache } from "@/lib/rpc";
 import { formatContractError } from "@/lib/errors";
 import { runTransaction, isBrowserWebAuth } from "@/lib/transact";
+import { TOKENS, DEFAULT_TOKEN, formatQuantity } from "@/lib/tokens";
 import toast from "react-hot-toast";
 import { 
   ChevronLeft, 
@@ -31,6 +32,8 @@ export default function NewCirclePage() {
   const [step, setStep] = useState<1 | 2 | 3>(1);
 
   // Form State
+  const [selectedTokenKey, setSelectedTokenKey] = useState<"XUSDC" | "XMD">("XUSDC");
+  const token = TOKENS[selectedTokenKey] ?? DEFAULT_TOKEN;
   const [name, setName] = useState("");
   const [amount, setAmount] = useState("25");
   const [periodSec, setPeriodSec] = useState<number>(604800); // Weekly by default
@@ -115,7 +118,7 @@ export default function NewCirclePage() {
     }
 
     if (parsedAmount <= 0) {
-      setAmountError("Amount must be greater than 0 USDC.");
+      setAmountError(`Amount must be greater than 0 ${token.label}.`);
       hasErr = true;
     } else {
       setAmountError(null);
@@ -162,7 +165,7 @@ export default function NewCirclePage() {
         console.warn("Could not query previous memberships before creating", e);
       }
 
-      const formattedAmount = parsedAmount.toFixed(6) + " XUSDC";
+      const formattedAmount = formatQuantity(parsedAmount, token);
 
       const actions = [
         {
@@ -330,6 +333,30 @@ export default function NewCirclePage() {
                   )}
                 </div>
 
+                {/* Token */}
+                <div className="form-group">
+                  <label className="form-label">Token</label>
+                  <div className="segmented-control" style={{ maxWidth: "320px" }}>
+                    <div
+                      className={`segmented-option ${selectedTokenKey === "XUSDC" ? "active" : ""}`}
+                      onClick={() => setSelectedTokenKey("XUSDC")}
+                    >
+                      USDC
+                    </div>
+                    <div
+                      className={`segmented-option ${selectedTokenKey === "XMD" ? "active" : ""}`}
+                      onClick={() => setSelectedTokenKey("XMD")}
+                    >
+                      XMD
+                    </div>
+                  </div>
+                  <span className="form-hint">
+                    {selectedTokenKey === "XUSDC"
+                      ? "USDC: XUSDC, backed 1:1 by USDC."
+                      : "XMD: Metal Dollar, the stablecoin of XPR Network."}
+                  </span>
+                </div>
+
                 {/* Amount per round */}
                 <div className="form-group">
                   <label className="form-label">Amount per round</label>
@@ -348,7 +375,7 @@ export default function NewCirclePage() {
                       placeholder="25.00"
                       style={{ borderColor: amountError ? "var(--danger-text)" : undefined }}
                     />
-                    <span className="input-suffix">USDC</span>
+                    <span className="input-suffix">{token.label}</span>
                   </div>
                   {amountError ? (
                     <span className="text-caption" style={{ color: "var(--danger-text)", display: "flex", alignItems: "center", gap: "4px", marginTop: "6px" }}>
@@ -372,7 +399,7 @@ export default function NewCirclePage() {
                             if (amountError) setAmountError(null);
                           }}
                         >
-                          {preset} USDC
+                          {preset} {token.label}
                         </button>
                       );
                     })}
@@ -473,7 +500,7 @@ export default function NewCirclePage() {
                             1 round (Family)
                           </span>
                           <span style={{ fontWeight: 700, color: "var(--brand)", fontSize: "15px" }}>
-                            {(1 * parsedAmount).toFixed(2)} USDC
+                            {(1 * parsedAmount).toFixed(2)} {token.label}
                           </span>
                         </div>
                         <p className="text-caption" style={{ color: "var(--text-secondary)" }}>
@@ -496,7 +523,7 @@ export default function NewCirclePage() {
                             2 rounds (Friends)
                           </span>
                           <span style={{ fontWeight: 700, color: "var(--brand)", fontSize: "15px" }}>
-                            {(2 * parsedAmount).toFixed(2)} USDC
+                            {(2 * parsedAmount).toFixed(2)} {token.label}
                           </span>
                         </div>
                         <p className="text-caption" style={{ color: "var(--text-secondary)" }}>
@@ -519,7 +546,7 @@ export default function NewCirclePage() {
                             3 rounds (People you know less well)
                           </span>
                           <span style={{ fontWeight: 700, color: "var(--brand)", fontSize: "15px" }}>
-                            {(3 * parsedAmount).toFixed(2)} USDC
+                            {(3 * parsedAmount).toFixed(2)} {token.label}
                           </span>
                         </div>
                         <p className="text-caption" style={{ color: "var(--text-secondary)" }}>
@@ -587,16 +614,16 @@ export default function NewCirclePage() {
                   </h3>
                   <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
                     <p className="text-body" style={{ color: "var(--text)" }}>
-                      • <strong>{maxMembers} people</strong> pay <strong>{parsedAmount.toFixed(2)} USDC</strong> {getFrequencyLabel()}.
+                      • <strong>{maxMembers} people</strong> pay <strong>{parsedAmount.toFixed(2)} {token.label}</strong> {getFrequencyLabel()}.
                     </p>
                     <p className="text-body" style={{ color: "var(--text)" }}>
-                      • Each {getPeriodSingular()} one of them takes the pot of <strong>{pot} USDC</strong>.
+                      • Each {getPeriodSingular()} one of them takes the pot of <strong>{pot} {token.label}</strong>.
                     </p>
                     <p className="text-body" style={{ color: "var(--text)" }}>
                       • It runs for <strong>{maxMembers} rounds</strong> ({getDurationText()}).
                     </p>
                     <p className="text-body" style={{ color: "var(--text)" }}>
-                      • Everyone pays a <strong>{deposit} USDC</strong> security deposit to join, returned in full at the end.
+                      • Everyone pays a <strong>{deposit} {token.label}</strong> security deposit to join, returned in full at the end.
                     </p>
                     <p className="text-body" style={{ color: "var(--text)" }}>
                       • {requireKyc ? "Verified KYC accounts only." : "Open to all XPR accounts."}
@@ -620,15 +647,15 @@ export default function NewCirclePage() {
                     </div>
                     <div style={{ display: "flex", justifyContent: "space-between" }}>
                       <span className="text-body" style={{ color: "var(--text-secondary)" }}>Pot per round</span>
-                      <span className="text-body" style={{ fontWeight: 700, color: "var(--brand)" }}>{pot} USDC</span>
+                      <span className="text-body" style={{ fontWeight: 700, color: "var(--brand)" }}>{pot} {token.label}</span>
                     </div>
                     <div style={{ display: "flex", justifyContent: "space-between" }}>
                       <span className="text-body" style={{ color: "var(--text-secondary)" }}>Security deposit</span>
-                      <span className="text-body" style={{ fontWeight: 700 }}>{deposit} USDC</span>
+                      <span className="text-body" style={{ fontWeight: 700 }}>{deposit} {token.label}</span>
                     </div>
                     <div style={{ display: "flex", justifyContent: "space-between" }}>
                       <span className="text-body" style={{ color: "var(--text-secondary)" }}>Total circle volume</span>
-                      <span className="text-body" style={{ fontWeight: 700 }}>{totalVolume} USDC</span>
+                      <span className="text-body" style={{ fontWeight: 700 }}>{totalVolume} {token.label}</span>
                     </div>
                     <div style={{ display: "flex", justifyContent: "space-between" }}>
                       <span className="text-body" style={{ color: "var(--text-secondary)" }}>Total duration</span>
@@ -798,7 +825,7 @@ export default function NewCirclePage() {
                   Pot per round
                 </span>
                 <div className="text-amount" style={{ color: "var(--pot-text)", fontSize: "32px", lineHeight: 1.1 }}>
-                  {pot} USDC
+                  {pot} {token.label}
                 </div>
                 <span className="text-caption" style={{ color: "var(--pot-text)", marginTop: "4px", display: "block" }}>
                   Distributed to one member every {getPeriodSingular()}
@@ -810,13 +837,13 @@ export default function NewCirclePage() {
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                   <span className="text-caption">Round payment</span>
                   <span style={{ fontWeight: 600, fontSize: "14px" }}>
-                    {parsedAmount.toFixed(2)} USDC {getFrequencyLabel()}
+                    {parsedAmount.toFixed(2)} {token.label} {getFrequencyLabel()}
                   </span>
                 </div>
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                   <span className="text-caption">Security deposit</span>
                   <span style={{ fontWeight: 600, fontSize: "14px" }}>
-                    {deposit} USDC
+                    {deposit} {token.label}
                   </span>
                 </div>
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
@@ -847,17 +874,17 @@ export default function NewCirclePage() {
         <div>
           <div style={{ display: "flex", alignItems: "baseline", gap: "6px" }}>
             <span style={{ fontWeight: 800, fontSize: "17px", color: "var(--brand)" }}>
-              {pot} USDC
+              {pot} {token.label}
             </span>
             <span className="text-caption">pot</span>
           </div>
           <div className="text-caption" style={{ fontSize: "12px" }}>
-            {maxMembers} members, {parsedAmount.toFixed(2)} USDC {getFrequencyLabel()}
+            {maxMembers} members, {parsedAmount.toFixed(2)} {token.label} {getFrequencyLabel()}
           </div>
         </div>
         <div style={{ textAlign: "right" }}>
           <span className="text-caption" style={{ fontSize: "12px", display: "block" }}>
-            Deposit: {deposit} USDC
+            Deposit: {deposit} {token.label}
           </span>
           <span className="text-caption" style={{ fontSize: "12px", color: "var(--brand)", fontWeight: 600 }}>
             {maxMembers} rounds

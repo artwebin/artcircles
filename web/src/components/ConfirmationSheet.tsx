@@ -2,10 +2,11 @@
 
 import React, { useState, useEffect, useRef } from "react";
 import { useProton } from "./ProtonProvider";
-import { getXusdcBalance, clearRpcCache } from "@/lib/rpc";
+import { getTokenBalance, clearRpcCache } from "@/lib/rpc";
 import { formatContractError } from "@/lib/errors";
 import { runTransaction, isBrowserWebAuth } from "@/lib/transact";
 import { EXPLORER_URL } from "@/lib/config";
+import { TokenInfo, DEFAULT_TOKEN } from "@/lib/tokens";
 import { ExternalLink, ShieldCheck, AlertCircle, HelpCircle } from "lucide-react";
 
 export interface ConfirmationSheetProps {
@@ -14,6 +15,7 @@ export interface ConfirmationSheetProps {
   title: string;
   sentence: string;
   to?: string;
+  token?: TokenInfo;
   amountStr?: string;
   rawAmount?: number;
   memo?: string;
@@ -31,6 +33,7 @@ export function ConfirmationSheet({
   title,
   sentence,
   to = "artcircles",
+  token,
   amountStr,
   rawAmount = 0,
   memo = "",
@@ -41,6 +44,7 @@ export function ConfirmationSheet({
   pollCondition,
   onSuccess,
 }: ConfirmationSheetProps) {
+  const activeToken = token ?? DEFAULT_TOKEN;
   const { session } = useProton();
   const [balance, setBalance] = useState<number | null>(null);
   const [loadingBalance, setLoadingBalance] = useState(false);
@@ -59,14 +63,14 @@ export function ConfirmationSheet({
   useEffect(() => {
     if (isOpen && account && rawAmount > 0) {
       setLoadingBalance(true);
-      getXusdcBalance(account).then((bal) => {
+      getTokenBalance(account, activeToken).then((bal) => {
         setBalance(bal);
         setLoadingBalance(false);
       }).catch(() => setLoadingBalance(false));
     } else {
       setBalance(null);
     }
-  }, [isOpen, account, rawAmount]);
+  }, [isOpen, account, rawAmount, activeToken]);
 
   // Reset state when opened or closed
   useEffect(() => {
@@ -309,7 +313,7 @@ export function ConfirmationSheet({
                   fontSize: "14px",
                 }}
               >
-                You need {missingAmount} more XUSDC. Current balance: {balance?.toFixed(2)} XUSDC.
+                You need {missingAmount} more {activeToken.label}. Current balance: {balance?.toFixed(2)} {activeToken.label}.
               </div>
             )}
 

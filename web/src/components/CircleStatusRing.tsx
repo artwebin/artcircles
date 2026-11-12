@@ -8,12 +8,14 @@ interface CircleStatusRingProps {
   members: RingMember[];
   currentRound: number;
   potAmount: string;
+  token?: string;
 }
 
 export function CircleStatusRing({
   members,
   currentRound,
   potAmount,
+  token,
 }: CircleStatusRingProps) {
   const { session } = useProton();
   const viewer = session?.auth?.actor;
@@ -25,6 +27,7 @@ export function CircleStatusRing({
         members={members}
         currentRound={currentRound}
         potAmount={potAmount}
+        token={token}
         viewer={viewer}
       />
     </div>

@@ -4,6 +4,7 @@ import React, { useState, useEffect } from "react";
 import Link from "next/link";
 import { useProton } from "@/components/ProtonProvider";
 import { getMyCircles } from "@/lib/rpc";
+import { tokenOf } from "@/lib/tokens";
 import { 
   Plus, 
   Coins, 
@@ -101,6 +102,7 @@ export default function MyCirclesPage() {
   const needsActionCircles: { circle: any; reason: string; ctaText: string }[] = [];
 
   circles.forEach((c) => {
+    const token = tokenOf(c.amount);
     const parsedAmount = parseFloat(c.amount);
     const requiredDeposit = parsedAmount * c.depositRounds;
 
@@ -108,14 +110,14 @@ export default function MyCirclesPage() {
       if (c.myMember && c.myMember.paidRound < c.round) {
         needsActionCircles.push({
           circle: c,
-          reason: `Your payment of ${parsedAmount.toFixed(2)} USDC is due for round ${c.round}`,
+          reason: `Your payment of ${parsedAmount.toFixed(2)} ${token.label} is due for round ${c.round}`,
           ctaText: "Pay now"
         });
       }
       if (c.myMember && c.myMember.deposit < requiredDeposit) {
         needsActionCircles.push({
           circle: c,
-          reason: `Your security deposit is low (${(c.myMember.deposit / 1000000).toFixed(2)} of ${requiredDeposit.toFixed(2)} USDC)`,
+          reason: `Your security deposit is low (${(c.myMember.deposit / 1000000).toFixed(2)} of ${requiredDeposit.toFixed(2)} ${token.label})`,
           ctaText: "Top up"
         });
       }
@@ -300,6 +302,7 @@ export default function MyCirclesPage() {
 
                 <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(320px, 1fr))", gap: "var(--space-20)" }}>
                   {activeCircles.map((circle) => {
+                    const token = tokenOf(circle.amount);
                     const parsedAmount = parseFloat(circle.amount).toFixed(2);
                     const pot = (parseFloat(circle.amount) * circle.maxMembers).toFixed(2);
                     const paidMembers = circle.membersList.filter((m: any) => m.paidRound === circle.round).length;
@@ -327,7 +330,7 @@ export default function MyCirclesPage() {
                             </span>
                           </div>
                           <p className="text-caption" style={{ marginBottom: "16px" }}>
-                            {parsedAmount} USDC {getFrequencyText(circle.periodSec)}, {circle.maxMembers} members
+                            {parsedAmount} {token.label} {getFrequencyText(circle.periodSec)}, {circle.maxMembers} members
                           </p>
 
                           <div style={{ 
@@ -341,7 +344,7 @@ export default function MyCirclesPage() {
                                 Round {circle.round} of {circle.maxMembers}
                               </span>
                               <span className="text-caption" style={{ color: isMyTurn ? "var(--pot-text)" : "var(--brand)", fontWeight: 700 }}>
-                                Pot: {pot} USDC
+                                Pot: {pot} {token.label}
                               </span>
                             </div>
                             <p className="text-caption" style={{ color: isMyTurn ? "var(--pot-text)" : "var(--text)", marginTop: "4px", fontWeight: isMyTurn ? 700 : 500 }}>
@@ -380,6 +383,7 @@ export default function MyCirclesPage() {
 
                 <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(320px, 1fr))", gap: "var(--space-20)" }}>
                   {formingCircles.map((circle) => {
+                    const token = tokenOf(circle.amount);
                     const rawAmount = parseFloat(circle.amount);
                     const parsedAmount = rawAmount.toFixed(2);
                     const deposit = (rawAmount * circle.depositRounds).toFixed(2);
@@ -406,7 +410,7 @@ export default function MyCirclesPage() {
                             <span className="status-pill status-neutral">● Waiting for members</span>
                           </div>
                           <p className="text-caption" style={{ marginBottom: "16px" }}>
-                            {parsedAmount} USDC {getFrequencyText(circle.periodSec)}, {circle.isOrganizer ? "Organized by you" : `Organized by ${circle.organizer}`}
+                            {parsedAmount} {token.label} {getFrequencyText(circle.periodSec)}, {circle.isOrganizer ? "Organized by you" : `Organized by ${circle.organizer}`}
                           </p>
 
                           <div style={{ marginBottom: "16px" }}>
@@ -429,7 +433,7 @@ export default function MyCirclesPage() {
 
                         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", paddingTop: "8px", borderTop: "1px solid var(--border)" }}>
                           <span className="text-caption" style={{ color: "var(--text-secondary)" }}>
-                            Deposit: {deposit} USDC
+                            Deposit: {deposit} {token.label}
                           </span>
                           <span className="text-caption" style={{ color: "var(--brand)", fontWeight: 600 }}>
                             Manage & Invite →
@@ -463,31 +467,34 @@ export default function MyCirclesPage() {
 
                 {showFinished && (
                   <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(320px, 1fr))", gap: "var(--space-16)", marginTop: "var(--space-16)" }}>
-                    {finishedCircles.map((circle) => (
-                      <Link 
-                        key={circle.id} 
-                        href={`/c/${circle.id}`} 
-                        className="card"
-                        style={{ 
-                          textDecoration: "none", 
-                          opacity: 0.85,
-                          background: "var(--surface)",
-                          display: "flex",
-                          flexDirection: "column",
-                          gap: "8px"
-                        }}
-                      >
-                        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                          <span style={{ fontWeight: 700, fontSize: "16px" }}>{circle.name}</span>
-                          <span className="status-pill status-neutral">
-                            {circle.state === 2 ? "Completed" : "Cancelled"}
-                          </span>
-                        </div>
-                        <p className="text-caption">
-                          {circle.maxMembers} rounds completed, {(parseFloat(circle.amount) * circle.maxMembers * circle.maxMembers).toFixed(2)} USDC total volume
-                        </p>
-                      </Link>
-                    ))}
+                    {finishedCircles.map((circle) => {
+                      const token = tokenOf(circle.amount);
+                      return (
+                        <Link 
+                          key={circle.id} 
+                          href={`/c/${circle.id}`} 
+                          className="card"
+                          style={{ 
+                            textDecoration: "none", 
+                            opacity: 0.85,
+                            background: "var(--surface)",
+                            display: "flex",
+                            flexDirection: "column",
+                            gap: "8px"
+                          }}
+                        >
+                          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                            <span style={{ fontWeight: 700, fontSize: "16px" }}>{circle.name}</span>
+                            <span className="status-pill status-neutral">
+                              {circle.state === 2 ? "Completed" : "Cancelled"}
+                            </span>
+                          </div>
+                          <p className="text-caption">
+                            {circle.maxMembers} rounds completed, {(parseFloat(circle.amount) * circle.maxMembers * circle.maxMembers).toFixed(2)} {token.label} total volume
+                          </p>
+                        </Link>
+                      );
+                    })}
                   </div>
                 )}
               </div>

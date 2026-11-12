@@ -6,6 +6,7 @@ import { getSchedule } from "@/lib/schedule";
 import { ClientDeadline } from "./ClientDeadline";
 import type { PayoutRow } from "@/lib/rpc";
 import { roundStatus } from "@/lib/payouts";
+import { tokenOf } from "@/lib/tokens";
 
 interface YourPartCardProps {
   circle: {
@@ -42,6 +43,7 @@ export function YourPartCard({
   const me = members.find((m) => m.account === currentActor);
   if (!me) return null;
 
+  const token = tokenOf(circle.amount);
   const parsedAmount = parseFloat(circle.amount);
   const fullPot = (parsedAmount * circle.maxMembers).toFixed(2);
   const totalCommitment = (parsedAmount * circle.maxMembers).toFixed(2);
@@ -83,12 +85,12 @@ export function YourPartCard({
   } else if (isDepositZero) {
     depositNote = "Your deposit covered a missed round. Nothing will be returned at the end.";
   } else {
-    depositNote = `Your deposit covered a missed round. The remaining ${currentDeposit.toFixed(2)} USDC comes back when the circle ends.`;
+    depositNote = `Your deposit covered a missed round. The remaining ${currentDeposit.toFixed(2)} ${token.label} comes back when the circle ends.`;
   }
 
   // Refill and debt messages before receiving
   const showRefill = missing > 0 && !hasReceived && me.slot < circle.maxMembers;
-  const refillText = showRefill ? `${missing.toFixed(2)} USDC of it refills your deposit first.` : null;
+  const refillText = showRefill ? `${missing.toFixed(2)} ${token.label} of it refills your deposit first.` : null;
 
   let debtMicro = 0;
   if (typeof me.debt === "number") {
@@ -101,7 +103,7 @@ export function YourPartCard({
     }
   }
   const debtNumeric = debtMicro / 1e6;
-  const debtText = debtNumeric > 0 ? `${debtNumeric.toFixed(2)} USDC of unpaid rounds is taken from your pot.` : null;
+  const debtText = debtNumeric > 0 ? `${debtNumeric.toFixed(2)} ${token.label} of unpaid rounds is taken from your pot.` : null;
 
   // Payout pot text when received
   const myPayoutRow = payouts?.find((p) => p.round === me.slot);
@@ -111,9 +113,9 @@ export function YourPartCard({
 
   let receivedPotText = "You received the pot.";
   if (myPayoutRow) {
-    receivedPotText = `${parseFloat(myPayoutRow.paid).toFixed(2)} USDC received.`;
+    receivedPotText = `${parseFloat(myPayoutRow.paid).toFixed(2)} ${token.label} received.`;
   } else if (myPayoutEvent?.amount) {
-    receivedPotText = `${parseFloat(myPayoutEvent.amount).toFixed(2)} USDC received.`;
+    receivedPotText = `${parseFloat(myPayoutEvent.amount).toFixed(2)} ${token.label} received.`;
   }
 
   const schedule = getSchedule(circle, chainTime);
@@ -136,11 +138,11 @@ export function YourPartCard({
           ) : payoutDeadline ? (
             <ClientDeadline
               deadlineSec={payoutDeadline.deadlineSec}
-              prefix={`${fullPot} USDC, sent to you as soon as everyone has paid, at the latest `}
+              prefix={`${fullPot} ${token.label}, sent to you as soon as everyone has paid, at the latest `}
               suffix="."
             />
           ) : (
-            `${fullPot} USDC, sent to you as soon as everyone has paid, at the latest at the deadline.`
+            `${fullPot} ${token.label}, sent to you as soon as everyone has paid, at the latest at the deadline.`
           )}
         </p>
         {!hasReceived && refillText && (

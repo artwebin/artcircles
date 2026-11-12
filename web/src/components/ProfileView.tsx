@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useProton } from "@/components/ProtonProvider";
 import { ReputationCard } from "@/components/ReputationCard";
 import { EXPLORER_URL } from "@/lib/config";
+import { tokenOf } from "@/lib/tokens";
 import { 
   ReputationData, 
   getAvatarColor,
@@ -261,6 +262,7 @@ export function ProfileView({
               ) : (
                 <div className="circle-rows-list">
                   {currentCircles.map((c) => {
+                    const token = tokenOf(c.amount);
                     const parsedAmount = parseFloat(c.amount).toFixed(2);
                     const myMember = c.membersList?.find((m: any) => m.account === account);
                     const isOrganizer = c.organizer === account;
@@ -338,7 +340,7 @@ export function ProfileView({
 
                           {/* Line 2 */}
                           <div className="row-line2">
-                            {c.maxMembers} members, {parsedAmount} USDC {getFrequencyText(c.periodSec)}.
+                            {c.maxMembers} members, {parsedAmount} {token.label} {getFrequencyText(c.periodSec)}.
                           </div>
 
                           {/* Line 3 */}
@@ -386,6 +388,7 @@ export function ProfileView({
               ) : (
                 <div className="circle-rows-list">
                   {visiblePastCircles.map((c) => {
+                    const token = tokenOf(c.amount);
                     const parsedAmount = parseFloat(c.amount).toFixed(2);
                     const myMember = c.membersList?.find((m: any) => m.account === account);
                     const isOrganizer = c.organizer === account;
@@ -444,7 +447,7 @@ export function ProfileView({
 
                           {/* Line 2 */}
                           <div className="row-line2">
-                            {c.maxMembers} members, {parsedAmount} USDC {getFrequencyText(c.periodSec)}.
+                            {c.maxMembers} members, {parsedAmount} {token.label} {getFrequencyText(c.periodSec)}.
                           </div>
 
                           {/* Line 3 */}

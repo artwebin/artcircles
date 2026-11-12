@@ -72,7 +72,7 @@ const FAQS: FAQItem[] = [
     q: "What tokens are supported?",
     a: (
       <p>
-        XPR Circles currently runs with <strong>XUSDC</strong> on XPR Network. XUSDC is backed 1:1 by USDC.
+        A circle saves in one stablecoin, chosen when it is created: <strong>XUSDC</strong> (backed 1:1 by USDC) or <strong>XMD</strong> (Metal Dollar). All members pay in the same token.
       </p>
     )
   },

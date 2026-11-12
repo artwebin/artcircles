@@ -91,7 +91,7 @@ export async function getCirclesEvents(
   try {
     while (hasMore) {
       const data = await fetchHyperionWithFailover(
-        `/v2/history/get_actions?account=artcircles&filter=xtokens:transfer,artcircles:start&sort=asc&limit=${limit}&skip=${skip}${afterParam}`
+        `/v2/history/get_actions?account=artcircles&filter=xtokens:transfer,xmd.token:transfer,artcircles:start&sort=asc&limit=${limit}&skip=${skip}${afterParam}`
       );
 
       const actions = data?.actions;
@@ -139,7 +139,7 @@ export async function getCirclesEvents(
 
     // 2. Transfer events from artcircles (payout or completed refund)
     if (
-      act.account === "xtokens" &&
+      (act.account === "xtokens" || act.account === "xmd.token") &&
       act.name === "transfer" &&
       act.data?.from === "artcircles"
     ) {

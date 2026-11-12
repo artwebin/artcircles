@@ -7,6 +7,7 @@ import { useProton } from "./ProtonProvider";
 import { formatContractError } from "@/lib/errors";
 import { getMembers, getCircle, clearRpcCache } from "@/lib/rpc";
 import { getSchedule } from "@/lib/schedule";
+import { tokenOf, formatQuantity, TokenInfo } from "@/lib/tokens";
 import { ConfirmationSheet } from "./ConfirmationSheet";
 import { ClientDeadline } from "./ClientDeadline";
 import { Check } from "lucide-react";
@@ -38,6 +39,7 @@ export function CircleActions({
   periodSec,
   chainTime,
 }: CircleActionsProps) {
+  const token = tokenOf(amount);
   const router = useRouter();
   const { session, login } = useProton();
   const [error, setError] = useState<{ message: string; rawDetails?: string } | null>(null);
@@ -51,6 +53,7 @@ export function CircleActions({
     amountStr?: string;
     rawAmount?: number;
     memo?: string;
+    token?: TokenInfo;
     actions: any[];
     successSentence: string;
     pollCondition?: () => Promise<boolean>;
@@ -97,7 +100,7 @@ export function CircleActions({
   // --- Handlers using Confirmation Sheet ---
   const handleJoin = () => {
     const rawDeposit = parsedAmount * depositRounds;
-    const totalDeposit = rawDeposit.toFixed(6) + " XUSDC";
+    const totalDeposit = formatQuantity(rawDeposit, token);
     setSheetConfig({
       isOpen: true,
       title: "Join circle",
@@ -105,10 +108,11 @@ export function CircleActions({
       to: "artcircles",
       amountStr: totalDeposit,
       rawAmount: rawDeposit,
+      token,
       memo: `join:${circleId}`,
       actions: [
         {
-          account: "xtokens",
+          account: token.contract,
           name: "transfer",
           authorization: [session.auth],
           data: {
@@ -128,7 +132,7 @@ export function CircleActions({
   };
 
   const handlePay = () => {
-    const payAmount = parsedAmount.toFixed(6) + " XUSDC";
+    const payAmount = formatQuantity(parsedAmount, token);
     setSheetConfig({
       isOpen: true,
       title: `Pay round ${currentRound}`,
@@ -136,10 +140,11 @@ export function CircleActions({
       to: "artcircles",
       amountStr: payAmount,
       rawAmount: parsedAmount,
+      token,
       memo: `pay:${circleId}`,
       actions: [
         {
-          account: "xtokens",
+          account: token.contract,
           name: "transfer",
           authorization: [session.auth],
           data: {
@@ -161,12 +166,13 @@ export function CircleActions({
 
   const handleLeave = () => {
     const rawDeposit = parsedAmount * depositRounds;
-    const totalDeposit = rawDeposit.toFixed(6) + " XUSDC";
+    const totalDeposit = formatQuantity(rawDeposit, token);
     setSheetConfig({
       isOpen: true,
       title: "Leave circle",
       sentence: `You are leaving circle #${circleId}. Your security deposit of ${totalDeposit} will be refunded immediately.`,
       to: "artcircles",
+      token,
       actions: [
         {
           account: "artcircles",
@@ -322,7 +328,7 @@ export function CircleActions({
       if (!me) {
         actionButton = (
           <button className="btn-primary" onClick={handleJoin}>
-            Join with a {(parsedAmount * depositRounds).toFixed(2)} USDC deposit
+            Join with a {(parsedAmount * depositRounds).toFixed(2)} {token.label} deposit
           </button>
         );
       } else {
@@ -409,7 +415,7 @@ export function CircleActions({
       if (me.paidRound < currentRound) {
         actionButton = (
           <button className="btn-primary" onClick={handlePay}>
-            Pay {parsedAmount.toFixed(2)} USDC
+            Pay {parsedAmount.toFixed(2)} {token.label}
           </button>
         );
       }
@@ -476,7 +482,7 @@ export function CircleActions({
               <p className="text-body" style={{ color: "var(--text-secondary)" }}>
                 {nextRound <= maxMembers && nextDeadline ? (
                   <>
-                    Your next payment of {parsedAmount.toFixed(2)} USDC is due{" "}
+                    Your next payment of {parsedAmount.toFixed(2)} {token.label} is due{" "}
                     <ClientDeadline deadlineSec={nextDeadline.deadlineSec} />.
                   </>
                 ) : (
@@ -519,7 +525,7 @@ export function CircleActions({
               return (
                 <>
                   <h3 className="text-h3" style={{ color: "var(--warning-text)", marginBottom: "8px" }} suppressHydrationWarning>
-                    Your payment of {parsedAmount.toFixed(2)} USDC is {dueText}
+                    Your payment of {parsedAmount.toFixed(2)} {token.label} is {dueText}
                   </h3>
                   <p className="text-body" style={{ color: "var(--warning-text)" }}>
                     Round {currentRound} closes{" "}

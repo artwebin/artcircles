@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { useProton } from "@/components/ProtonProvider";
 import { getCircle, getMembers, clearRpcCache } from "@/lib/rpc";
+import { tokenOf } from "@/lib/tokens";
 import toast from "react-hot-toast";
 import { 
   ChevronLeft, 
@@ -117,6 +118,7 @@ export default function SetOrderPage({ params }: { params: Promise<{ id: string 
   }
 
   const isOrganizer = session && session.auth.actor === circle.organizer;
+  const token = tokenOf(circle.amount || "");
   const parsedAmount = parseFloat(circle.amount || "0");
   const pot = (parsedAmount * circle.maxMembers).toFixed(2);
 
@@ -451,7 +453,7 @@ export default function SetOrderPage({ params }: { params: Promise<{ id: string 
                     {isOrg && <span className="text-caption" style={{ color: "var(--text-secondary)" }}>(organizer)</span>}
                   </div>
                   <p className="text-caption" style={{ marginTop: "2px" }}>
-                    Takes the pot in round {index + 1} ({pot} USDC)
+                    Takes the pot in round {index + 1} ({pot} {token.label})
                   </p>
                 </div>
 
