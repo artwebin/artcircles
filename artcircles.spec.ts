@@ -5,6 +5,9 @@ import { Name, TimePointSec } from "@greymass/eosio";
 const bc = new Blockchain();
 const circles = bc.createContract("artcircles", "target/artcircles.contract");
 const xtokens = bc.createContract("xtokens", "node_modules/proton-tsc/external/xtokens/xtokens");
+const xmd = bc.createContract("xmd.token", "node_modules/proton-tsc/external/xtokens/xtokens");
+// Issues a look-alike XUSDC that the contract must not accept
+const fake = bc.createContract("faketokens", "node_modules/proton-tsc/external/xtokens/xtokens");
 const proton = bc.createContract("eosio.proton", "mocks/target/eosio.proton.contract");
 const [alice, bob, carol, dave, erin] = bc.createAccounts("alice", "bob", "carol", "dave", "erin");
 
@@ -24,6 +27,8 @@ const join = (acc: string, memo = "join:0", qty = AMOUNT) =>
 beforeEach(async () => {
   bc.resetTables();
   await mintTokens(xtokens, "XUSDC", 6, 1000000, 1000, [alice, bob, carol, dave, erin]);
+  await mintTokens(xmd, "XMD", 6, 1000000, 1000, [alice, bob, carol, dave, erin]);
+  await mintTokens(fake, "XUSDC", 6, 1000000, 1000, [alice, bob, carol, dave, erin]);
   await circles.actions.create(["alice", "Family", AMOUNT, 3, WEEK, false, 1]).send("alice@active");
 });
 
@@ -41,10 +46,16 @@ describe("create", () => {
       "missing required authority alice"
     );
   });
-  it("rejects non-XUSDC amounts", async () => {
+  it("rejects unsupported tokens", async () => {
     await expectToThrow(
       circles.actions.create(["alice", "X", "10.0000 XPR", 3, WEEK, false, 1]).send("alice@active"),
-      "eosio_assert: Only XUSDC is supported"
+      "eosio_assert: Only XUSDC and XMD are supported"
+    );
+  });
+  it("rejects a supported symbol with the wrong precision", async () => {
+    await expectToThrow(
+      circles.actions.create(["alice", "X", "10.0000 XMD", 3, WEEK, false, 1]).send("alice@active"),
+      "eosio_assert: Only XUSDC and XMD are supported"
     );
   });
   it("rejects too short period", async () => {
@@ -532,5 +543,89 @@ describe("memberships index", () => {
     await circles.actions.reindex([0]).send("artcircles@active");
     expect(index("alice")).to.deep.equal([{ circle: 0, organizer: true, member: true }]);
     expect(index("bob")).to.deep.equal([{ circle: 0, organizer: false, member: true }]);
+  });
+});
+
+describe("XMD circles", () => {
+  const XMD_AMOUNT = "10.000000 XMD";
+  const xmdBalance = (acc: string): string => {
+    const rows = xmd.tables.accounts(nameToBigInt(Name.from(acc))).getTableRows();
+    return rows.length ? rows[0].balance : "0.000000 XMD";
+  };
+  const sendXmd = (acc: string, memo: string, qty = XMD_AMOUNT) =>
+    xmd.actions.transfer([acc, "artcircles", qty, memo]).send(`${acc}@active`);
+  const ALL = ["alice", "bob", "carol"];
+  // circle 1 is the XMD circle, circle 0 (XUSDC) comes from beforeEach
+  const createXmd = () =>
+    circles.actions.create(["alice", "Dollars", XMD_AMOUNT, 3, WEEK, false, 1]).send("alice@active");
+  const afterDeadline = (id: number) =>
+    bc.setTime(TimePointSec.fromInteger(circle(id).roundStart + circle(id).periodSec));
+  const startXmd = async (order = ALL) => {
+    await createXmd();
+    for (const a of ALL) await sendXmd(a, "join:1");
+    await circles.actions.setorder(["alice", 1, order]).send("alice@active");
+    for (const a of ALL) await circles.actions.approve([a, 1]).send(`${a}@active`);
+    await circles.actions.start(["alice", 1]).send("alice@active");
+  };
+
+  it("creates an XMD circle", async () => {
+    await createXmd();
+    expect(circle(1).amount).to.equal(XMD_AMOUNT);
+  });
+  it("full cycle in XMD: pots and deposits go back through xmd.token", async () => {
+    await startXmd();
+    expect(xmdBalance("artcircles")).to.equal("30.000000 XMD");
+    for (let r = 0; r < 3; r++) {
+      for (const a of ALL) await sendXmd(a, "pay:1");
+      await circles.actions.payout([1]).send("bob@active");
+    }
+    expect(circle(1).state).to.equal(2);
+    for (const a of ALL) expect(xmdBalance(a)).to.equal("1000.000000 XMD");
+    expect(xmdBalance("artcircles")).to.equal("0.000000 XMD");
+    // XUSDC balances untouched
+    for (const a of ALL) expect(balance(a)).to.equal("1000.000000 XUSDC");
+  });
+  it("XMD deposit refill follows the same rules", async () => {
+    await startXmd(["alice", "carol", "bob"]);
+    // round 1: carol misses, her deposit covers it
+    await sendXmd("alice", "pay:1"); await sendXmd("bob", "pay:1");
+    afterDeadline(1);
+    await circles.actions.payout([1]).send("bob@active");
+    // round 2: carol receives, 10 refills her deposit first
+    for (const a of ALL) await sendXmd(a, "pay:1");
+    await circles.actions.payout([1]).send("bob@active");
+    // round 3: bob receives
+    for (const a of ALL) await sendXmd(a, "pay:1");
+    await circles.actions.payout([1]).send("bob@active");
+    const rows = circles.tables.payouts(BigInt(1)).getTableRows();
+    expect(rows[0].covered).to.deep.equal(["carol"]);
+    expect(rows[1].paid).to.equal("20.000000 XMD");
+    expect(rows[1].toDeposit).to.equal("10.000000 XMD");
+    expect(rows[2].paid).to.equal("30.000000 XMD");
+    for (const a of ALL) expect(xmdBalance(a)).to.equal("1000.000000 XMD");
+    expect(xmdBalance("artcircles")).to.equal("0.000000 XMD");
+  });
+  it("rejects XUSDC sent to an XMD circle", async () => {
+    await createXmd();
+    await expectToThrow(join("bob", "join:1"), "eosio_assert: This circle uses XMD");
+  });
+  it("rejects XMD sent to an XUSDC circle (join, pay, topup)", async () => {
+    await expectToThrow(sendXmd("bob", "join:0"), "eosio_assert: This circle uses XUSDC");
+    await join("alice"); await join("bob"); await join("carol");
+    await circles.actions.setorder(["alice", 0, ALL]).send("alice@active");
+    for (const a of ALL) await circles.actions.approve([a, 0]).send(`${a}@active`);
+    await circles.actions.start(["alice", 0]).send("alice@active");
+    await expectToThrow(sendXmd("bob", "pay:0"), "eosio_assert: This circle uses XUSDC");
+    // empty bob's deposit, then try to refill it with XMD
+    await xtokens.actions.transfer(["alice", "artcircles", AMOUNT, "pay:0"]).send("alice@active");
+    await xtokens.actions.transfer(["carol", "artcircles", AMOUNT, "pay:0"]).send("carol@active");
+    afterDeadline(0);
+    await circles.actions.payout([0]).send("bob@active");
+    await expectToThrow(sendXmd("bob", "topup:0"), "eosio_assert: This circle uses XUSDC");
+  });
+  it("rejects a look-alike XUSDC from another contract", async () => {
+    await expectToThrow(
+      fake.actions.transfer(["bob", "artcircles", AMOUNT, "join:0"]).send("bob@active"),
+      "eosio_assert: Token not accepted from this contract");
   });
 });

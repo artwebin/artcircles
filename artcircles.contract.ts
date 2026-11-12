@@ -8,9 +8,19 @@ import { UserInfo } from "./proton.tables";
 
 const PROTON_USERS = Name.fromString("eosio.proton");
 
-// v1: XUSDC on xtokens only
-const TOKEN_CONTRACT = Name.fromString("xtokens");
-const TOKEN_SYMBOL = new Symbol("XUSDC", 6);
+// Supported tokens. A circle uses the token of its round amount; every transfer
+// in or out of a circle goes through that token's own contract.
+const XUSDC_SYMBOL = new Symbol("XUSDC", 6);
+const XUSDC_CONTRACT = Name.fromString("xtokens");
+const XMD_SYMBOL = new Symbol("XMD", 6);
+const XMD_CONTRACT = Name.fromString("xmd.token");
+
+function tokenContractOf(sym: Symbol): Name {
+    if (sym == XUSDC_SYMBOL) return XUSDC_CONTRACT;
+    if (sym == XMD_SYMBOL) return XMD_CONTRACT;
+    check(false, "Only XUSDC and XMD are supported");
+    return EMPTY_NAME;
+}
 
 const STATE_FORMING: u8 = 0;
 const STATE_ACTIVE: u8 = 1;
@@ -21,7 +31,7 @@ const MIN_MEMBERS: u32 = 2;
 const MAX_MEMBERS: u32 = 50;
 const MIN_PERIOD: u32 = 86400;        // 1 day
 const MAX_PERIOD: u32 = 86400 * 90;   // 90 days
-const MAX_AMOUNT: i64 = 100000 * 1000000; // 100,000 XUSDC per round
+const MAX_AMOUNT: i64 = 100000 * 1000000; // 100,000 per round (all supported tokens have 6 decimals)
 
 @table("global", singleton)
 export class Global extends Table {
@@ -191,7 +201,7 @@ export class artcircles extends Contract {
     ): void {
         requireAuth(organizer);
         check(name.length > 0 && name.length <= 64, "Name must be 1-64 characters");
-        check(amount.symbol == TOKEN_SYMBOL, "Only XUSDC is supported");
+        tokenContractOf(amount.symbol);
         check(amount.isValid() && amount.amount > 0, "Amount must be positive");
         check(amount.amount <= MAX_AMOUNT, "Amount too large");
         check(depositRounds >= 1 && depositRounds <= 3, "Deposit must be 1 to 3 rounds");
@@ -220,8 +230,9 @@ export class artcircles extends Contract {
         // Ignore outgoing transfers and transfers not addressed to this contract
         if (t.from == this.contract || t.to != this.contract) return;
 
-        check(this.firstReceiver == TOKEN_CONTRACT, "Only xtokens transfers are accepted");
-        check(t.quantity.symbol == TOKEN_SYMBOL, "Only XUSDC is accepted");
+        // A token is accepted only from its own contract, so a look-alike token
+        // with the same symbol issued elsewhere is rejected.
+        check(this.firstReceiver == tokenContractOf(t.quantity.symbol), "Token not accepted from this contract");
 
         const parts = t.memo.split(":");
         check(parts.length == 2, "Memo must be join:<id>, pay:<id> or topup:<id>");
@@ -245,6 +256,7 @@ export class artcircles extends Contract {
         const circle = this.circles.requireGet(id, "Circle not found");
         check(circle.state == STATE_FORMING, "Circle is not accepting members");
         check(circle.members < circle.maxMembers, "Circle is full");
+        this.checkToken(circle, quantity);
         check(quantity == this.depositOf(circle), "Deposit must equal the required amount");
         if (circle.requireKyc) {
             check(this.hasKyc(account), "This circle requires KYC verified members");
@@ -263,6 +275,7 @@ export class artcircles extends Contract {
     pay(account: Name, id: u64, quantity: Asset): void {
         const circle = this.circles.requireGet(id, "Circle not found");
         check(circle.state == STATE_ACTIVE, "Circle is not active");
+        this.checkToken(circle, quantity);
         check(quantity == circle.amount, "Payment must equal the round amount");
 
         const members = this.membersOf(id);
@@ -280,6 +293,10 @@ export class artcircles extends Contract {
         return u != null && u!.kyc.length > 0;
     }
 
+    checkToken(circle: Circle, quantity: Asset): void {
+        check(quantity.symbol == circle.amount.symbol, `This circle uses ${circle.amount.symbol.getSymbolString()}`);
+    }
+
     depositOf(circle: Circle): Asset {
         return new Asset(circle.amount.amount * <i64>circle.depositRounds, circle.amount.symbol);
     }
@@ -288,6 +305,7 @@ export class artcircles extends Contract {
     topup(account: Name, id: u64, quantity: Asset): void {
         const circle = this.circles.requireGet(id, "Circle not found");
         check(circle.state == STATE_ACTIVE, "Circle is not active");
+        this.checkToken(circle, quantity);
 
         const members = this.membersOf(id);
         const m = members.requireGet(account.N, "Not a member");
@@ -392,7 +410,7 @@ export class artcircles extends Contract {
         members.update(r, SAME_PAYER);
 
         if (payoutAmount > 0) {
-            sendTransferToken(TOKEN_CONTRACT, this.contract, r.account,
+            sendTransferToken(tokenContractOf(circle.amount.symbol), this.contract, r.account,
                 new Asset(payoutAmount, circle.amount.symbol),
                 `artcircles: circle ${id}, round ${circle.round} payout`);
         }
@@ -438,7 +456,7 @@ export class artcircles extends Contract {
                 if (largest == null || m.shortBy > largest!.shortBy) largest = m;
             }
             if (refund > 0) {
-                sendTransferToken(TOKEN_CONTRACT, this.contract, m.account, new Asset(refund, sym),
+                sendTransferToken(tokenContractOf(circle.amount.symbol), this.contract, m.account, new Asset(refund, sym),
                     `artcircles: circle ${id} completed, deposit refund and compensation`);
             }
             this.bumpReputation(m);
@@ -448,7 +466,7 @@ export class artcircles extends Contract {
         // Rounding remainder goes to the member who lost the most
         const dust = circle.reserve - distributed;
         if (dust > 0 && largest != null) {
-            sendTransferToken(TOKEN_CONTRACT, this.contract, largest!.account, new Asset(dust, sym),
+            sendTransferToken(tokenContractOf(circle.amount.symbol), this.contract, largest!.account, new Asset(dust, sym),
                 `artcircles: circle ${id} completed, rounding remainder`);
         }
 
@@ -482,7 +500,7 @@ export class artcircles extends Contract {
         // Membership changed, the agreed order is no longer valid
         this.clearOrder(id);
 
-        sendTransferToken(TOKEN_CONTRACT, this.contract, account, refund, `artcircles: deposit refund, circle ${id}`);
+        sendTransferToken(tokenContractOf(circle.amount.symbol), this.contract, account, refund, `artcircles: deposit refund, circle ${id}`);
     }
 
     clearOrder(id: u64): void {
@@ -566,7 +584,7 @@ export class artcircles extends Contract {
         let m = members.first();
         while (m) {
             const next = members.next(m);
-            sendTransferToken(TOKEN_CONTRACT, this.contract, m.account, m.deposit, `artcircles: circle ${id} cancelled, deposit refund`);
+            sendTransferToken(tokenContractOf(circle.amount.symbol), this.contract, m.account, m.deposit, `artcircles: circle ${id} cancelled, deposit refund`);
             this.unmarkMember(m.account, id);
             members.remove(m);
             m = next;
