@@ -9,7 +9,7 @@
     "test": "node --test"
   },
   "dependencies": {
-    "@proton/js": "27.13.0"
+    "@proton/js": "30.1.0"
   },
   "engines": {
     "node": ">=18"
