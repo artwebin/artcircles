@@ -19,7 +19,7 @@
   "devDependencies": {
     "@greymass/abi2core": "^1.1.0",
     "@greymass/eosio": "^0.5.5",
-    "@proton/cli": "^0.1.74",
+    "@proton/cli": "^0.1.100",
     "@proton/js": "^26.1.2",
     "@proton/vert": "^0.3.18",
     "@types/chai": "^4.3.0",
