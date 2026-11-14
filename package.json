@@ -17,7 +17,7 @@
   },
   "engineStrict": true,
   "devDependencies": {
-    "@greymass/abi2core": "^1.1.0",
+    "@greymass/abi2core": "^2.0.1",
     "@greymass/eosio": "^0.5.5",
     "@proton/cli": "^0.1.74",
     "@proton/js": "^26.1.2",
