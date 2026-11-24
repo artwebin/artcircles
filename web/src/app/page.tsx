@@ -129,28 +129,38 @@ export default function LandingPage() {
             
             <div className="card" style={{ background: "var(--bg)", border: "none" }}>
               <h3 className="text-h3" style={{ marginBottom: "8px" }}>Testnet circle #{PROOF_CIRCLE_ID}</h3>
-              <p className="text-caption" style={{ marginBottom: "24px" }}>Three members, 10.00 USDC a round. Member C stopped paying on purpose.</p>
+              <p className="text-caption" style={{ marginBottom: "24px" }}>Five members, 10.00 USDC a round, 10.00 deposit. C missed round 2, and nobody paid round 5.</p>
               
               <div style={{ display: "flex", flexDirection: "column", gap: "1px", background: "var(--border)", border: "1px solid var(--border)", borderRadius: "var(--radius-md)", overflow: "hidden" }}>
                 <div style={{ display: "flex", padding: "16px", background: "var(--surface)", gap: "16px" }}>
                   <div style={{ fontWeight: 700, width: "60px", fontSize: "14px" }}>Round 1</div>
-                  <div style={{ flex: 1, fontSize: "14px" }}>C misses the deadline. C's security deposit covers it.</div>
-                  <div style={{ background: "var(--pot-subtle)", color: "var(--pot-text)", padding: "4px 8px", borderRadius: "4px", fontSize: "12px", fontWeight: 700, alignSelf: "start" }}>A gets 30.00</div>
+                  <div style={{ flex: 1, fontSize: "14px" }}>Everyone pays on time.</div>
+                  <div style={{ background: "var(--pot-subtle)", color: "var(--pot-text)", padding: "4px 8px", borderRadius: "4px", fontSize: "12px", fontWeight: 700, alignSelf: "start", whiteSpace: "nowrap" }}>A gets 50.00</div>
                 </div>
                 <div style={{ display: "flex", padding: "16px", background: "var(--surface)", gap: "16px" }}>
                   <div style={{ fontWeight: 700, width: "60px", fontSize: "14px" }}>Round 2</div>
-                  <div style={{ flex: 1, fontSize: "14px" }}>C misses again with no deposit left. Recorded as a 10.00 debt.</div>
-                  <div style={{ background: "var(--pot-subtle)", color: "var(--pot-text)", padding: "4px 8px", borderRadius: "4px", fontSize: "12px", fontWeight: 700, alignSelf: "start" }}>B gets 20.00</div>
+                  <div style={{ flex: 1, fontSize: "14px" }}>C misses the deadline. C&apos;s security deposit covers it.</div>
+                  <div style={{ background: "var(--pot-subtle)", color: "var(--pot-text)", padding: "4px 8px", borderRadius: "4px", fontSize: "12px", fontWeight: 700, alignSelf: "start", whiteSpace: "nowrap" }}>B gets 50.00</div>
                 </div>
                 <div style={{ display: "flex", padding: "16px", background: "var(--surface)", gap: "16px" }}>
                   <div style={{ fontWeight: 700, width: "60px", fontSize: "14px" }}>Round 3</div>
                   <div style={{ flex: 1, fontSize: "14px" }}>C receives the pot. 10.00 refills C&apos;s deposit first.</div>
-                  <div style={{ background: "var(--pot-subtle)", color: "var(--pot-text)", padding: "4px 8px", borderRadius: "4px", fontSize: "12px", fontWeight: 700, alignSelf: "start" }}>C gets 10.00</div>
+                  <div style={{ background: "var(--pot-subtle)", color: "var(--pot-text)", padding: "4px 8px", borderRadius: "4px", fontSize: "12px", fontWeight: 700, alignSelf: "start", whiteSpace: "nowrap" }}>C gets 40.00</div>
+                </div>
+                <div style={{ display: "flex", padding: "16px", background: "var(--surface)", gap: "16px" }}>
+                  <div style={{ fontWeight: 700, width: "60px", fontSize: "14px" }}>Round 4</div>
+                  <div style={{ flex: 1, fontSize: "14px" }}>Everyone pays on time.</div>
+                  <div style={{ background: "var(--pot-subtle)", color: "var(--pot-text)", padding: "4px 8px", borderRadius: "4px", fontSize: "12px", fontWeight: 700, alignSelf: "start", whiteSpace: "nowrap" }}>D gets 50.00</div>
+                </div>
+                <div style={{ display: "flex", padding: "16px", background: "var(--surface)", gap: "16px" }}>
+                  <div style={{ fontWeight: 700, width: "60px", fontSize: "14px" }}>Round 5</div>
+                  <div style={{ flex: 1, fontSize: "14px" }}>Nobody pays. Deposits cover it, and E gets their own deposit back.</div>
+                  <div style={{ background: "var(--pot-subtle)", color: "var(--pot-text)", padding: "4px 8px", borderRadius: "4px", fontSize: "12px", fontWeight: 700, alignSelf: "start", whiteSpace: "nowrap" }}>E gets 40.00 + 10.00</div>
                 </div>
                 <div style={{ display: "flex", padding: "16px", background: "var(--surface)", gap: "16px" }}>
                   <div style={{ fontWeight: 700, width: "60px", fontSize: "14px" }}>End</div>
-                  <div style={{ flex: 1, fontSize: "14px" }}>B is paid back the 10.00. Everyone ends with exactly what they started with.</div>
-                  <div style={{ background: "var(--brand-subtle)", color: "var(--brand)", padding: "4px 8px", borderRadius: "4px", fontSize: "12px", fontWeight: 700, alignSelf: "start" }}>All at 100.00</div>
+                  <div style={{ flex: 1, fontSize: "14px" }}>All five members end with exactly the balance they started with.</div>
+                  <div style={{ background: "var(--brand-subtle)", color: "var(--brand)", padding: "4px 8px", borderRadius: "4px", fontSize: "12px", fontWeight: 700, alignSelf: "start", whiteSpace: "nowrap" }}>All even</div>
                 </div>
               </div>
               
@@ -218,7 +228,7 @@ export default function LandingPage() {
           <section style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "var(--space-64)", marginBottom: "var(--space-120)", alignItems: "start" }}>
             <h2 className="text-h2">Already tested on chain.</h2>
             <p className="text-body-lg" style={{ color: "var(--text-secondary)" }}>
-              Two circles ran on XPR testnet. The contract held the money, the keeper paid every round within a minute of the deadline, and the bot sent every reminder. Nobody stepped in.
+              A five-member circle ran on XPR testnet for five days. The contract held the money, the keeper paid every round on time, and the bot sent every reminder. Nobody stepped in.
             </p>
           </section>
           

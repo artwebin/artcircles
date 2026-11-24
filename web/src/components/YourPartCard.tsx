@@ -61,8 +61,8 @@ export function YourPartCard({
 
   const depositFull = parsedAmount * circle.depositRounds;
   let currentDeposit = depositFull;
-  if (me.deposit) {
-    const rawVal = parseFloat(me.deposit);
+  if (me.deposit !== undefined && me.deposit !== null) {
+    const rawVal = parseFloat(String(me.deposit));
     if (!isNaN(rawVal)) {
       currentDeposit = rawVal;
     }
@@ -73,12 +73,23 @@ export function YourPartCard({
   const isLast = me.slot === circle.maxMembers;
   const hasReceived = me.received === 1 || me.received === true;
 
-  // Deposit note
+  // Deposit note and row label
   const isDepositFull = currentDeposit >= depositFull - 0.000001;
   const isDepositZero = currentDeposit <= 0.000001;
+  const isCompleted = circle.state === 2;
+
+  const depositStatus = isCompleted
+    ? isDepositZero
+      ? "Used"
+      : `${depositHeld} returned`
+    : `${depositHeld} held`;
 
   let depositNote = "Your deposit comes back when the circle ends.";
-  if (isDepositFull) {
+  if (isCompleted) {
+    depositNote = isDepositZero
+      ? "Your deposit covered a missed round. Nothing was returned at the end."
+      : "Your deposit was returned when the circle ended.";
+  } else if (isDepositFull) {
     depositNote = "Your deposit comes back when the circle ends.";
   } else if (!hasReceived && !isLast) {
     depositNote = "Your deposit covered a missed round. It is refilled from your pot before the rest is sent to you.";
@@ -163,7 +174,7 @@ export function YourPartCard({
       </div>
       <div style={{ display: "flex", justifyContent: "space-between", paddingBottom: "12px", borderBottom: "1px solid var(--border)", marginBottom: "12px" }}>
         <span className="text-body" style={{ color: "var(--text-secondary)" }}>Security deposit</span>
-        <span className="text-body" style={{ fontWeight: 700 }}>{depositHeld} held</span>
+        <span className="text-body" style={{ fontWeight: 700 }}>{depositStatus}</span>
       </div>
       <div style={{ display: "flex", justifyContent: "space-between", paddingBottom: "16px", marginBottom: "8px" }}>
         <span className="text-body" style={{ color: "var(--text-secondary)" }}>Missed payments</span>

@@ -2,7 +2,7 @@
  * Global configuration constants for XPR Circles
  */
 
-export const PROOF_CIRCLE_ID = 1;
+export const PROOF_CIRCLE_ID = 7;
 
 export const CHAIN = process.env.NEXT_PUBLIC_CHAIN === "mainnet" ? "mainnet" : "testnet";
 
@@ -53,16 +53,16 @@ export interface ProofEventConfig {
 }
 
 export const PROOF_EVENTS = [
-  { circle: 0, type: "completed", title: "Circle #0 completed",
-    text: "Three members, three rounds, everyone paid on time. Each received the pot once and got their deposit back.",
-    timestamp: "2026-10-05T07:13:34.500Z", trxId: "c68da20b4b66346995816823c0be83be5b34ece17b540adf78156ff6bf2d1a02" },
-  { circle: 1, type: "payout", round: 1, title: "Circle #1, round 1 paid out",
-    text: "One member missed the deadline. Their deposit covered it and the pot was paid in full.",
-    timestamp: "2026-10-06T07:27:07.500Z", trxId: "1938b7ea35973765581865baa5dfb54bd13b2f60315cdb7bdfc8bab87028996c" },
-  { circle: 1, type: "payout", round: 2, title: "Circle #1, round 2 paid out",
-    text: "The same member missed again with no deposit left. It was recorded as their debt, and that round's pot was smaller.",
-    timestamp: "2026-10-07T07:26:18.000Z", trxId: "180c54e003e14b353dcc510a1113012032e3bcb8045e64c297796d9a28cf9f09" },
-  { circle: 1, type: "completed", title: "Circle #1 completed",
-    text: "The debt was held back from that member's own pot and paid to the member who got less. All three ended with exactly 100.00.",
-    timestamp: "2026-10-08T07:26:40.000Z", trxId: "0be42ee2b982691b4bce719a79238bda83fd1d2f8b18317b2ae6f4c4b002d01e" },
+  { circle: 7, type: "payout", round: 2, title: "Circle #7, round 2 paid out",
+    text: "One member missed the deadline. Their deposit covered the payment, and the pot was paid in full: 50.00.",
+    timestamp: "2026-11-14T22:34:10.000Z", trxId: "146c814206e723570d376f11fa6c8d9e9ab4e06388b7c248ae36cf25ad3b3457" },
+  { circle: 7, type: "payout", round: 3, title: "Circle #7, round 3 paid out",
+    text: "That member was next to receive the pot. 10.00 refilled their deposit first, and the remaining 40.00 was sent to them.",
+    timestamp: "2026-11-15T18:50:53.000Z", trxId: "a24bdbc3f3f6a42dd0f9ed342519514d81ddde90c389980018b41f852f93f73d" },
+  { circle: 7, type: "payout", round: 4, title: "Circle #7, round 4 paid out",
+    text: "Everyone paid on time, and the pot was paid out within a minute of the last payment.",
+    timestamp: "2026-11-16T21:20:15.000Z", trxId: "842ee052367e3795e72b3722718845fb57c8f654ed9e3c248d5af3dac70c1d18" },
+  { circle: 7, type: "completed", title: "Circle #7 completed",
+    text: "Nobody paid the last round. The deposits covered it, so the last member received 40.00 plus their own deposit back. All five members ended with exactly the balance they started with.",
+    timestamp: "2026-11-17T22:33:36.000Z", trxId: "2af717e0580319e7bdb6371060f8ea5b8d90e7a1d5faa8092aa30ca990ec700d" },
 ] as const;
