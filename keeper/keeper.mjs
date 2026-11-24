@@ -124,13 +124,28 @@ async function main() {
       for (const [k, t] of done) if (now - t > 86400) done.delete(k);
       for (const [k, t] of failedUntil) if (t < now) failedUntil.delete(k);
     } catch (e) {
-      log("error", `poll failed: ${e.message}`);
+      log(e?.name === "AbortError" ? "warn" : "error", `poll failed: ${e?.name === "AbortError" ? "RPC request timed out" : e.message}`);
     }
 
     for (let i = 0; i < pollSeconds && running; i++) await new Promise((r) => setTimeout(r, 1000));
   }
 }
 
+// @proton/js races several RPC endpoints and aborts the slower requests. A late
+// abort can surface as an unhandled rejection with a full stack trace; log one
+// line instead and keep polling.
+function logStray(kind, e) {
+  const name = e?.name || "Error";
+  const msg = e?.message || String(e);
+  log(name === "AbortError" ? "warn" : "error", `${kind}: ${name}: ${msg}`);
+}
+
 if (import.meta.url === `file://${process.argv[1]}`) {
+  process.on("unhandledRejection", (e) => logStray("unhandled rejection", e));
+  process.on("uncaughtException", (e) => {
+    logStray("uncaught exception", e);
+    // Anything other than a stray abort leaves unknown state: exit and let systemd restart us
+    if (e?.name !== "AbortError") process.exit(1);
+  });
   main();
 }
